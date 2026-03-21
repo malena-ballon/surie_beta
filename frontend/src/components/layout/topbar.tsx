@@ -1,0 +1,159 @@
+"use client"
+
+import React from "react"
+import Link from "next/link"
+import { ChevronRight, Search, Bell, ChevronDown, LogOut, Settings, HelpCircle } from "lucide-react"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { cn } from "@/lib/utils"
+
+// ── Types ──────────────────────────────────────────────────────
+export interface BreadcrumbItem {
+  label: string
+  href?: string
+}
+
+interface TopBarProps {
+  breadcrumbs?: BreadcrumbItem[]
+  userName?: string
+  hasNotifications?: boolean
+}
+
+// ── Breadcrumb ─────────────────────────────────────────────────
+function Breadcrumb({ items }: { items: BreadcrumbItem[] }) {
+  return (
+    <nav aria-label="Breadcrumb" className="flex items-center gap-1">
+      {items.map((item, index) => {
+        const isLast = index === items.length - 1
+        return (
+          <React.Fragment key={item.label}>
+            {index > 0 && (
+              <ChevronRight className="w-3.5 h-3.5 text-ink-tertiary shrink-0" strokeWidth={2} />
+            )}
+            {isLast || !item.href ? (
+              <span
+                className={cn(
+                  "text-sm font-medium leading-none",
+                  isLast ? "text-ink-primary" : "text-ink-tertiary"
+                )}
+              >
+                {item.label}
+              </span>
+            ) : (
+              <Link
+                href={item.href}
+                className="text-sm font-medium leading-none text-ink-tertiary hover:text-ink-primary transition-colors duration-[150ms]"
+              >
+                {item.label}
+              </Link>
+            )}
+          </React.Fragment>
+        )
+      })}
+    </nav>
+  )
+}
+
+// ── Avatar initials ────────────────────────────────────────────
+function getInitials(name: string) {
+  return name
+    .split(" ")
+    .map((part) => part[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase()
+}
+
+// ── TopBar ─────────────────────────────────────────────────────
+export function TopBar({
+  breadcrumbs = [{ label: "Dashboard" }],
+  userName = "Teacher Maria",
+  hasNotifications = true,
+}: TopBarProps) {
+  const initials = getInitials(userName)
+
+  return (
+    <header
+      className="h-16 shrink-0 sticky top-0 z-40 flex items-center gap-4 px-6 border-b border-border-light topbar-glass"
+      style={{ backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)" }}
+    >
+      {/* LEFT — Breadcrumb */}
+      <div className="flex-1 min-w-0">
+        <Breadcrumb items={breadcrumbs} />
+      </div>
+
+      {/* CENTER — Search */}
+      <div className="hidden md:flex items-center relative w-full max-w-[320px]">
+        <Search
+          className="absolute left-3 w-4 h-4 text-ink-tertiary pointer-events-none"
+          strokeWidth={1.75}
+        />
+        <input
+          type="text"
+          placeholder="Search assessments, students..."
+          readOnly
+          className={cn(
+            "w-full h-9 pl-9 pr-4 text-sm",
+            "bg-surface-secondary rounded-full border border-border-light",
+            "text-ink-secondary placeholder:text-ink-tertiary",
+            "cursor-default focus:outline-none",
+            "transition-colors duration-[150ms]"
+          )}
+        />
+      </div>
+
+      {/* RIGHT — Notification + User */}
+      <div className="flex items-center gap-3 shrink-0">
+        {/* Notification bell */}
+        <button
+          className="relative w-9 h-9 flex items-center justify-center rounded-[10px] text-ink-secondary hover:bg-surface-secondary hover:text-ink-primary transition-colors duration-[150ms]"
+          aria-label="Notifications"
+        >
+          <Bell className="w-5 h-5" strokeWidth={1.75} />
+          {hasNotifications && (
+            <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-danger-500" />
+          )}
+        </button>
+
+        {/* User dropdown */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button className="flex items-center gap-2 rounded-[10px] px-2 py-1.5 hover:bg-surface-secondary transition-colors duration-[150ms] outline-none focus-visible:ring-2 focus-visible:ring-primary-500">
+              {/* Avatar circle */}
+              <div className="w-9 h-9 rounded-full bg-primary-100 flex items-center justify-center shrink-0">
+                <span className="text-xs font-semibold text-primary-600 font-display leading-none">
+                  {initials}
+                </span>
+              </div>
+              <span className="hidden sm:block text-sm font-medium text-ink-primary leading-none">
+                {userName}
+              </span>
+              <ChevronDown className="w-3.5 h-3.5 text-ink-tertiary" strokeWidth={2} />
+            </button>
+          </DropdownMenuTrigger>
+
+          <DropdownMenuContent align="end" sideOffset={8} className="w-48">
+            <DropdownMenuItem className="gap-2 cursor-pointer">
+              <Settings className="w-4 h-4 text-ink-tertiary" strokeWidth={1.75} />
+              Account Settings
+            </DropdownMenuItem>
+            <DropdownMenuItem className="gap-2 cursor-pointer">
+              <HelpCircle className="w-4 h-4 text-ink-tertiary" strokeWidth={1.75} />
+              Help
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem className="gap-2 cursor-pointer text-danger-500 focus:text-danger-500 focus:bg-danger-50">
+              <LogOut className="w-4 h-4" strokeWidth={1.75} />
+              Sign Out
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+    </header>
+  )
+}

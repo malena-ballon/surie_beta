@@ -1,0 +1,418 @@
+@import "tailwindcss";
+
+/* ─────────────────────────────────────────────
+   SURIE DESIGN SYSTEM — Tailwind v4 Theme
+   All design tokens live here. This file IS
+   the tailwind config (v4 has no config.ts).
+───────────────────────────────────────────── */
+
+@theme inline {
+
+  /* ── Fonts ── */
+  --font-display: "DM Sans", system-ui, sans-serif;
+  --font-body:    "Plus Jakarta Sans", system-ui, sans-serif;
+  --font-mono:    "JetBrains Mono", "Fira Code", monospace;
+  --font-sans:    "Plus Jakarta Sans", system-ui, sans-serif;
+
+  /* ── Primary Blue ── */
+  --color-primary-50:  #E8F1FA;
+  --color-primary-100: #C5DCF2;
+  --color-primary-200: #9DC4E8;
+  --color-primary-300: #74ABDE;
+  --color-primary-400: #5697D6;
+  --color-primary-500: #0072C6;
+  --color-primary-600: #0065B3;
+  --color-primary-700: #00549A;
+  --color-primary-800: #004480;
+  --color-primary-900: #002D5C;
+
+  /* ── Accent Teal ── */
+  --color-accent-50:  #E0F7FA;
+  --color-accent-100: #B2EBF2;
+  --color-accent-200: #80DEEA;
+  --color-accent-300: #4DD0E1;
+  --color-accent-400: #26C6DA;
+  --color-accent-500: #00B4D8;
+  --color-accent-600: #00A0C2;
+  --color-accent-700: #0088A8;
+  --color-accent-800: #00708E;
+  --color-accent-900: #004D63;
+
+  /* ── Success ── */
+  --color-success-50:  #E8F5E9;
+  --color-success-100: #C8E6C9;
+  --color-success-500: #2D8A4E;
+  --color-success-600: #237A3E;
+  --color-success-700: #1B6B31;
+
+  /* ── Warning ── */
+  --color-warning-50:  #FFF8E1;
+  --color-warning-100: #FFECB3;
+  --color-warning-500: #F5A623;
+  --color-warning-600: #E09500;
+  --color-warning-700: #C68200;
+
+  /* ── Danger ── */
+  --color-danger-50:  #FFEBEE;
+  --color-danger-100: #FFCDD2;
+  --color-danger-500: #DC3545;
+  --color-danger-600: #C62828;
+  --color-danger-700: #B71C1C;
+
+  /* ── Info ── */
+  --color-info-50:  #E3F2FD;
+  --color-info-500: #2196F3;
+
+  /* ── Surface / Background ── */
+  --color-surface-body:      #F8F6F2;
+  --color-surface-card:      #FFFFFF;
+  --color-surface-secondary: #F5F3EF;
+  --color-surface-hover:     #FAFAFA;
+
+  /* ── Ink / Text ── */
+  --color-ink-primary:   #1A1A2E;
+  --color-ink-secondary: #5A5A72;
+  --color-ink-tertiary:  #8E8E9E;
+
+  /* ── Border ── */
+  --color-border-light:   #E8E6E1;
+  --color-border-default: #D5D3CE;
+  --color-border-focus:   #0072C6;
+  --color-border-active:  #00B4D8;
+
+  /* ── Mastery Level Colors ── */
+  --color-mastery-critical:    #DC3545;
+  --color-mastery-critical-bg: #FFEBEE;
+  --color-mastery-remedial:    #F5A623;
+  --color-mastery-remedial-bg: #FFF8E1;
+  --color-mastery-average:     #FFD54F;
+  --color-mastery-average-bg:  #FFFDE7;
+  --color-mastery-good:        #0072C6;
+  --color-mastery-good-bg:     #E8F1FA;
+  --color-mastery-mastered:    #2D8A4E;
+  --color-mastery-mastered-bg: #E8F5E9;
+
+  /* ── Border Radius ── */
+  --radius-sm:   6px;
+  --radius-md:   10px;
+  --radius-lg:   14px;
+  --radius-xl:   20px;
+  --radius-2xl:  24px;
+  --radius-full: 9999px;
+
+  /* ── Shadows (warm-toned — brown undertone, NOT cool gray) ── */
+  --shadow-xs:         0 1px 2px rgba(30, 25, 18, 0.04);
+  --shadow-sm:         0 1px 3px rgba(30, 25, 18, 0.06), 0 1px 2px rgba(30, 25, 18, 0.04);
+  --shadow-md:         0 4px 6px -1px rgba(30, 25, 18, 0.07), 0 2px 4px -2px rgba(30, 25, 18, 0.05);
+  --shadow-lg:         0 10px 15px -3px rgba(30, 25, 18, 0.08), 0 4px 6px -4px rgba(30, 25, 18, 0.04);
+  --shadow-xl:         0 20px 25px -5px rgba(30, 25, 18, 0.1), 0 8px 10px -6px rgba(30, 25, 18, 0.05);
+  --shadow-card:       0 1px 3px rgba(30, 25, 18, 0.05), 0 1px 2px rgba(30, 25, 18, 0.03);
+  --shadow-card-hover: 0 8px 25px -5px rgba(30, 25, 18, 0.1), 0 4px 10px -5px rgba(30, 25, 18, 0.04);
+  --shadow-brand-glow: 0 4px 14px rgba(0, 114, 198, 0.25);
+  --shadow-focus-ring: 0 0 0 3px rgba(0, 114, 198, 0.2);
+
+  /* ── Spacing Scale ── */
+  --spacing-1:  0.25rem;
+  --spacing-2:  0.5rem;
+  --spacing-3:  0.75rem;
+  --spacing-4:  1rem;
+  --spacing-5:  1.25rem;
+  --spacing-6:  1.5rem;
+  --spacing-8:  2rem;
+  --spacing-10: 2.5rem;
+  --spacing-12: 3rem;
+  --spacing-16: 4rem;
+
+  /* ── Background Image Utilities (generates bg-brand-gradient etc.) ── */
+  --background-image-brand-gradient:          linear-gradient(135deg, #0072C6 0%, #00B4D8 100%);
+  --background-image-brand-gradient-hover:    linear-gradient(135deg, #0065B3 0%, #00A0C2 100%);
+  --background-image-brand-gradient-subtle:   linear-gradient(135deg, rgba(0, 114, 198, 0.08) 0%, rgba(0, 180, 216, 0.08) 100%);
+  --background-image-brand-gradient-vertical: linear-gradient(180deg, #0072C6 0%, #00B4D8 100%);
+
+  /* ─────────────────────────────────────────────
+     SHADCN SEMANTIC TOKENS
+     These bare (no-suffix) color names map to
+     the utilities shadcn components reference:
+     bg-primary, bg-card, bg-background, etc.
+     They sit alongside our numbered scale
+     (bg-primary-500, bg-accent-500 …) — no clash.
+  ───────────────────────────────────────────── */
+
+  /* Page background & default text */
+  --color-background:          #F8F6F2;  /* warm cream — body bg */
+  --color-foreground:          #1A1A2E;  /* near-black with blue undertone */
+
+  /* Card & popover surfaces */
+  --color-card:                #FFFFFF;
+  --color-card-foreground:     #1A1A2E;
+  --color-popover:             #FFFFFF;
+  --color-popover-foreground:  #1A1A2E;
+
+  /* Primary action color (maps to Surie primary-500) */
+  --color-primary:             #0072C6;
+  --color-primary-foreground:  #FFFFFF;
+
+  /* Secondary / muted surfaces (maps to Surie surface-secondary) */
+  --color-secondary:           #F5F3EF;
+  --color-secondary-foreground:#1A1A2E;
+  --color-muted:               #F5F3EF;
+  --color-muted-foreground:    #5A5A72;
+
+  /* Accent — used by shadcn for hover/subtle highlight states.
+     Mapped to primary-50 so ghost/outline button hovers feel on-brand.
+     Our teal palette stays as --color-accent-50 … --color-accent-900. */
+  --color-accent:              #E8F1FA;  /* primary-50 */
+  --color-accent-foreground:   #0072C6;  /* primary-500 */
+
+  /* Destructive (maps to Surie danger-500) */
+  --color-destructive:         #DC3545;
+  --color-destructive-foreground: #FFFFFF;
+
+  /* Border — default border color for the bare `border` utility */
+  --color-border:              #E8E6E1;  /* border-light */
+
+  /* Input border */
+  --color-input:               #D5D3CE;  /* border-default */
+
+  /* Focus ring */
+  --color-ring:                #0072C6;  /* primary-500 */
+
+  /* Chart colors (used by shadcn chart components) */
+  --color-chart-1:             #0072C6;  /* primary-500 */
+  --color-chart-2:             #00B4D8;  /* accent-500 */
+  --color-chart-3:             #2D8A4E;  /* success-500 */
+  --color-chart-4:             #F5A623;  /* warning-500 */
+  --color-chart-5:             #DC3545;  /* danger-500 */
+}
+
+
+/* ─────────────────────────────────────────────
+   CSS CUSTOM PROPERTIES
+   For use directly in CSS (not Tailwind utilities)
+───────────────────────────────────────────── */
+
+:root {
+  /* Background aliases (match design doc variable names) */
+  --bg-body:              #F8F6F2;
+  --bg-surface:           #FFFFFF;
+  --bg-surface-hover:     #FAFAFA;
+  --bg-surface-secondary: #F5F3EF;
+  --bg-sidebar:           #FFFFFF;
+  --bg-topbar:            rgba(255, 255, 255, 0.85);
+  --bg-input:             #FFFFFF;
+  --bg-input-focus:       #F0F8FF;
+  --bg-code:              #F4F2EE;
+  --bg-overlay:           rgba(0, 45, 92, 0.5);
+
+  /* Text aliases */
+  --text-primary:      #1A1A2E;
+  --text-secondary:    #5A5A72;
+  --text-tertiary:     #8E8E9E;
+  --text-on-primary:   #FFFFFF;
+  --text-link:         #0072C6;
+  --text-link-hover:   #00549A;
+
+  /* Border aliases */
+  --border-light:   #E8E6E1;
+  --border-default: #D5D3CE;
+  --border-focus:   #0072C6;
+  --border-active:  #00B4D8;
+
+  /* Brand Gradients */
+  --gradient-brand:          linear-gradient(135deg, #0072C6 0%, #00B4D8 100%);
+  --gradient-brand-hover:    linear-gradient(135deg, #0065B3 0%, #00A0C2 100%);
+  --gradient-brand-subtle:   linear-gradient(135deg, rgba(0, 114, 198, 0.08) 0%, rgba(0, 180, 216, 0.08) 100%);
+  --gradient-brand-vertical: linear-gradient(180deg, #0072C6 0%, #00B4D8 100%);
+
+  /* Mastery Colors */
+  --mastery-critical:    #DC3545;
+  --mastery-critical-bg: #FFEBEE;
+  --mastery-remedial:    #F5A623;
+  --mastery-remedial-bg: #FFF8E1;
+  --mastery-average:     #FFD54F;
+  --mastery-average-bg:  #FFFDE7;
+  --mastery-good:        #0072C6;
+  --mastery-good-bg:     #E8F1FA;
+  --mastery-mastered:    #2D8A4E;
+  --mastery-mastered-bg: #E8F5E9;
+
+  /* Layout */
+  --sidebar-width-expanded:  260px;
+  --sidebar-width-collapsed: 72px;
+  --sidebar-transition:      width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  --topbar-height:           64px;
+  --content-max-width:       1280px;
+  --content-padding-x:       2rem;
+  --content-padding-y:       1.5rem;
+  --card-padding:            1.25rem;
+  --card-padding-lg:         1.5rem;
+  --grid-gap:                1.25rem;
+
+  /* Transitions */
+  --transition-fast:   150ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-base:   250ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-slow:   350ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-spring: 500ms cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* Typography Scale */
+  --text-page-title:    700 1.875rem/1.2 "DM Sans", system-ui, sans-serif;
+  --text-section-title: 600 1.25rem/1.3 "DM Sans", system-ui, sans-serif;
+  --text-card-title:    600 1rem/1.4 "DM Sans", system-ui, sans-serif;
+  --text-body-lg:       400 1rem/1.6 "Plus Jakarta Sans", system-ui, sans-serif;
+  --text-body:          400 0.875rem/1.6 "Plus Jakarta Sans", system-ui, sans-serif;
+  --text-body-sm:       400 0.8125rem/1.5 "Plus Jakarta Sans", system-ui, sans-serif;
+  --text-caption:       500 0.75rem/1.4 "Plus Jakarta Sans", system-ui, sans-serif;
+  --text-label:         600 0.75rem/1.4 "Plus Jakarta Sans", system-ui, sans-serif;
+  --text-stat-value:    700 2rem/1.1 "DM Sans", system-ui, sans-serif;
+  --text-stat-hero:     700 2.5rem/1.1 "DM Sans", system-ui, sans-serif;
+  --text-overline:      600 0.6875rem/1.4 "Plus Jakarta Sans", system-ui, sans-serif;
+}
+
+
+/* ─────────────────────────────────────────────
+   BASE STYLES
+───────────────────────────────────────────── */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  height: 100%;
+}
+
+body {
+  min-height: 100%;
+  background-color: var(--bg-body);      /* #F8F6F2 warm cream — NEVER pure white */
+  color: var(--text-primary);            /* #1A1A2E — NEVER pure black */
+  /* Use next/font CSS vars with fallback to font name */
+  font-family: var(--font-plus-jakarta-sans, "Plus Jakarta Sans"), system-ui, sans-serif;
+  font-size: 0.875rem;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-dm-sans, "DM Sans"), system-ui, sans-serif;
+  color: var(--text-primary);
+}
+
+code, pre, kbd {
+  font-family: var(--font-jetbrains-mono, "JetBrains Mono"), "Fira Code", monospace;
+}
+
+a {
+  color: var(--text-link);
+  text-decoration: none;
+}
+
+a:hover {
+  color: var(--text-link-hover);
+}
+
+
+/* ─────────────────────────────────────────────
+   ANIMATION KEYFRAMES
+───────────────────────────────────────────── */
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes countUp {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+
+/* ─────────────────────────────────────────────
+   UTILITY CLASSES
+   (reusable across all pages)
+───────────────────────────────────────────── */
+
+/* Staggered card fade-in */
+.card-grid > *                { animation: fadeInUp 0.4s ease-out both; }
+.card-grid > *:nth-child(1)   { animation-delay: 0ms; }
+.card-grid > *:nth-child(2)   { animation-delay: 80ms; }
+.card-grid > *:nth-child(3)   { animation-delay: 160ms; }
+.card-grid > *:nth-child(4)   { animation-delay: 240ms; }
+.card-grid > *:nth-child(5)   { animation-delay: 320ms; }
+.card-grid > *:nth-child(6)   { animation-delay: 400ms; }
+
+/* Skeleton shimmer loader */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    #F5F3EF 25%,
+    #E8E6E1 50%,
+    #F5F3EF 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: var(--radius-md);
+}
+
+/* Card hover lift */
+.card-interactive {
+  transition: transform var(--transition-base), box-shadow var(--transition-base);
+}
+.card-interactive:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-card-hover);
+}
+
+/* Brand gradient text (for logo wordmark) */
+.text-gradient-brand {
+  background: var(--gradient-brand);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Primary gradient button base */
+.btn-primary {
+  background: var(--gradient-brand);
+  color: #FFFFFF;
+  font-family: "DM Sans", system-ui, sans-serif;
+  font-weight: 600;
+  font-size: 0.875rem;
+  padding: 10px 24px;
+  border-radius: var(--radius-full);
+  box-shadow: var(--shadow-brand-glow);
+  border: none;
+  cursor: pointer;
+  transition: box-shadow var(--transition-base), transform var(--transition-fast);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.btn-primary:hover {
+  background: var(--gradient-brand-hover);
+  box-shadow: 0 6px 20px rgba(0, 114, 198, 0.35);
+  transform: scale(1.02);
+}
+.btn-primary:active {
+  transform: scale(0.98);
+}
+
+/* Frosted glass topbar */
+.topbar-glass {
+  background: var(--bg-topbar);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
