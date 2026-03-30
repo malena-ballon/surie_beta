@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { Toaster } from "sonner";
+import { AuthProvider } from "@/providers/auth-provider";
 import { DM_Sans, Plus_Jakarta_Sans, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -41,7 +43,10 @@ export default function RootLayout({
       lang="en"
       className={`${dmSans.variable} ${plusJakartaSans.variable} ${jetbrainsMono.variable} h-full`}
     >
-      <body className="min-h-full antialiased">{children}</body>
+      <body className="min-h-full antialiased">
+          <AuthProvider>{children}</AuthProvider>
+          <Toaster position="top-right" richColors />
+        </body>
     </html>
   );
 }

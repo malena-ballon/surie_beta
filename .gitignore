@@ -36,3 +36,7 @@ yarn-error.log*
 # Build
 dist/
 build/
+
+# Uploads
+backend/uploads/*
+!backend/uploads/.gitkeep
