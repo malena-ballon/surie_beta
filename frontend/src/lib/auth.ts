@@ -62,6 +62,27 @@ export async function getMe(token: string): Promise<AuthUser> {
   return res.json() as Promise<AuthUser>
 }
 
+export async function registerStudent(data: {
+  join_code: string
+  email: string
+  password: string
+  first_name: string
+  last_name: string
+}): Promise<AuthUser> {
+  const res = await fetch(`${API_URL}/api/v1/auth/register/student`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.detail ?? "Registration failed")
+  }
+  const { access_token } = (await res.json()) as { access_token: string }
+  localStorage.setItem(TOKEN_KEY, access_token)
+  return getMe(access_token)
+}
+
 export function logout(): void {
   localStorage.removeItem(TOKEN_KEY)
   window.location.href = "/login"

@@ -121,16 +121,27 @@ export default function LoginPage() {
           </Button>
         </form>
 
-        {/* Register link */}
-        <p className="text-center text-sm font-body text-ink-tertiary">
-          Don&apos;t have an account?{" "}
-          <Link
-            href="/register"
-            className="text-primary-500 hover:text-primary-600 font-medium transition-colors"
-          >
-            Register your school
-          </Link>
-        </p>
+        {/* Register links */}
+        <div className="space-y-2 text-center">
+          <p className="text-sm font-body text-ink-tertiary">
+            Don&apos;t have an account?{" "}
+            <Link
+              href="/register"
+              className="text-primary-500 hover:text-primary-600 font-medium transition-colors"
+            >
+              Register your school
+            </Link>
+          </p>
+          <p className="text-sm font-body text-ink-tertiary">
+            Are you a student?{" "}
+            <Link
+              href="/register/student"
+              className="text-accent-500 hover:text-accent-600 font-medium transition-colors"
+            >
+              Join with a class code
+            </Link>
+          </p>
+        </div>
       </div>
     </div>
   )

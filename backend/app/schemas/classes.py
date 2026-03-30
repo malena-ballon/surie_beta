@@ -38,6 +38,7 @@ class ClassItem(BaseModel):
     institution_id: uuid.UUID
     is_archived: bool
     student_count: int
+    join_code: str | None = None
     created_at: datetime
     updated_at: datetime
 

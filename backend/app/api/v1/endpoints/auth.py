@@ -6,7 +6,9 @@ from app.api.deps import get_current_user
 from app.core.database import get_db
 from app.core.security import create_access_token, get_password_hash, verify_password
 from app.models import Institution, User, UserRole
-from app.schemas.auth import LoginRequest, RegisterRequest, TokenResponse, UserResponse
+from app.models.classroom import Classroom
+from app.models.enrollment import Enrollment
+from app.schemas.auth import LoginRequest, RegisterRequest, StudentRegisterRequest, TokenResponse, UserResponse
 
 router = APIRouter()
 
@@ -33,6 +35,44 @@ async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)) ->
         last_name=body.last_name,
     )
     db.add(user)
+    await db.commit()
+    await db.refresh(user)
+
+    token = create_access_token({
+        "user_id": user.id,
+        "role": user.role,
+        "institution_id": user.institution_id,
+    })
+    return TokenResponse(access_token=token)
+
+
+@router.post("/register/student", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
+async def register_student(body: StudentRegisterRequest, db: AsyncSession = Depends(get_db)) -> TokenResponse:
+    # Validate join code
+    cls_result = await db.execute(
+        select(Classroom).where(Classroom.join_code == body.join_code.upper().strip())
+    )
+    classroom = cls_result.scalar_one_or_none()
+    if not classroom:
+        raise HTTPException(status_code=404, detail="Invalid join code")
+
+    # Check email not already taken
+    existing = await db.scalar(select(User).where(User.email == body.email))
+    if existing:
+        raise HTTPException(status_code=400, detail="Email already registered")
+
+    user = User(
+        institution_id=classroom.institution_id,
+        email=body.email,
+        password_hash=get_password_hash(body.password),
+        role=UserRole.student,
+        first_name=body.first_name,
+        last_name=body.last_name,
+    )
+    db.add(user)
+    await db.flush()
+
+    db.add(Enrollment(class_id=classroom.id, student_id=user.id))
     await db.commit()
     await db.refresh(user)
 

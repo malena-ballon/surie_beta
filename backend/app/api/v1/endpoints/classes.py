@@ -11,6 +11,7 @@ from app.api.deps import get_current_user
 from app.core.database import get_db
 from app.core.security import get_password_hash
 from app.models import Classroom, Enrollment, User, UserRole
+from app.models.classroom import _generate_join_code
 from app.schemas.classes import (
     AddStudentsRequest,
     AddStudentsResponse,
@@ -55,6 +56,7 @@ def _to_item(classroom: Classroom, count: int) -> ClassItem:
         institution_id=classroom.institution_id,
         is_archived=classroom.is_archived,
         student_count=count,
+        join_code=classroom.join_code,
         created_at=classroom.created_at,
         updated_at=classroom.updated_at,
     )
@@ -164,6 +166,22 @@ async def update_class(
     classroom = await _get_class_or_403(class_id, db, current_user)
     for key, val in body.model_dump(exclude_none=True).items():
         setattr(classroom, key, val)
+    await db.commit()
+    await db.refresh(classroom)
+    return _to_item(classroom, await _student_count(classroom.id, db))
+
+
+# ── Regenerate join code ──────────────────────────────────────
+
+
+@router.post("/{class_id}/regenerate-code", response_model=ClassItem)
+async def regenerate_join_code(
+    class_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> ClassItem:
+    classroom = await _get_class_or_403(class_id, db, current_user)
+    classroom.join_code = _generate_join_code()
     await db.commit()
     await db.refresh(classroom)
     return _to_item(classroom, await _student_count(classroom.id, db))

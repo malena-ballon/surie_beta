@@ -26,6 +26,14 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class StudentRegisterRequest(BaseModel):
+    join_code: str
+    email: EmailStr
+    password: str
+    first_name: str
+    last_name: str
+
+
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"

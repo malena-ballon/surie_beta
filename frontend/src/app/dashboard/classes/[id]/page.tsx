@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
-import { ArrowLeft, Plus, Trash2, Users } from "lucide-react"
+import { ArrowLeft, Copy, Plus, RefreshCw, Trash2, Users } from "lucide-react"
 import { toast } from "sonner"
 import { api, type ClassDetail, type StudentInfo, type StudentInput } from "@/lib/api"
 import { Button } from "@/components/ui/button"
@@ -211,6 +211,25 @@ export default function ClassDetailPage() {
   const [loading, setLoading] = useState(true)
   const [addOpen, setAddOpen] = useState(false)
   const [removing, setRemoving] = useState<string | null>(null)
+  const [regenerating, setRegenerating] = useState(false)
+
+  const copyCode = (code: string) => {
+    navigator.clipboard.writeText(code)
+    toast.success("Join code copied!")
+  }
+
+  const handleRegenerateCode = async () => {
+    setRegenerating(true)
+    try {
+      const updated = await api.regenerateJoinCode(id)
+      setCls((c) => c ? { ...c, join_code: updated.join_code } : c)
+      toast.success("New join code generated")
+    } catch {
+      toast.error("Failed to regenerate code")
+    } finally {
+      setRegenerating(false)
+    }
+  }
 
   const fetchClass = async () => {
     try {
@@ -282,10 +301,40 @@ export default function ClassDetailPage() {
             </span>
           </div>
         </div>
-        <Button variant="gradient" onClick={() => setAddOpen(true)}>
-          <Plus className="w-4 h-4" />
-          Add Students
-        </Button>
+        <div className="flex items-center gap-3">
+          {/* Join code card */}
+          {cls.join_code && (
+            <div className="flex items-center gap-2 bg-surface-secondary border border-border-light rounded-[10px] px-3 py-2">
+              <div>
+                <p className="text-[10px] font-body text-ink-tertiary uppercase tracking-wide leading-none mb-0.5">
+                  Join Code
+                </p>
+                <p className="font-mono font-bold text-sm text-ink-primary tracking-[0.2em] leading-none">
+                  {cls.join_code}
+                </p>
+              </div>
+              <button
+                onClick={() => copyCode(cls.join_code!)}
+                className="text-ink-tertiary hover:text-primary-500 transition-colors ml-1"
+                title="Copy code"
+              >
+                <Copy className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={handleRegenerateCode}
+                disabled={regenerating}
+                className="text-ink-tertiary hover:text-ink-secondary transition-colors disabled:opacity-50"
+                title="Regenerate code"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${regenerating ? "animate-spin" : ""}`} />
+              </button>
+            </div>
+          )}
+          <Button variant="gradient" onClick={() => setAddOpen(true)}>
+            <Plus className="w-4 h-4" />
+            Add Students
+          </Button>
+        </div>
       </div>
 
       {/* Student roster */}

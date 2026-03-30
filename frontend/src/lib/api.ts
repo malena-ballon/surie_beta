@@ -47,6 +47,7 @@ export interface ClassItem {
   institution_id: string
   is_archived: boolean
   student_count: number
+  join_code: string | null
   created_at: string
   updated_at: string
 }
@@ -235,6 +236,9 @@ export const api = {
   },
   removeStudent(classId: string, studentId: string) {
     return req<void>(`/api/v1/classes/${classId}/students/${studentId}`, { method: "DELETE" })
+  },
+  regenerateJoinCode(classId: string) {
+    return req<ClassItem>(`/api/v1/classes/${classId}/regenerate-code`, { method: "POST" })
   },
 
   // Assessments
