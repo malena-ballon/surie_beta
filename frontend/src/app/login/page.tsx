@@ -22,8 +22,8 @@ export default function LoginPage() {
     setError("")
     setIsLoading(true)
     try {
-      await login(email, password)
-      router.replace("/dashboard")
+      const u = await login(email, password)
+      router.replace(u.role === "student" ? "/student" : "/dashboard")
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed")
     } finally {

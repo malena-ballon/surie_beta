@@ -188,6 +188,24 @@ export interface GenerateData {
   grade_level: string
 }
 
+export type SubmissionStatus = "in_progress" | "submitted" | "graded" | "pending_review"
+
+export interface StudentAssessmentItem {
+  id: string
+  title: string
+  class_name: string
+  subject: string
+  difficulty: DifficultyLevel
+  status: AssessmentStatus
+  start_at: string | null
+  end_at: string | null
+  question_count: number
+  submission_id: string | null
+  submission_status: SubmissionStatus | null
+  total_score: number | null
+  max_score: number | null
+}
+
 // ── API functions ──────────────────────────────────────────────
 
 export const api = {
@@ -270,6 +288,17 @@ export const api = {
   },
   deleteQuestion(id: string) {
     return req<void>(`/api/v1/questions/${id}`, { method: "DELETE" })
+  },
+
+  // Student
+  getStudentAssessments() {
+    return req<StudentAssessmentItem[]>("/api/v1/submissions/students/assessments")
+  },
+  startExam(assessmentId: string) {
+    return req<{ id: string; status: string; questions: unknown[] }>("/api/v1/submissions", {
+      method: "POST",
+      body: JSON.stringify({ assessment_id: assessmentId }),
+    })
   },
 
   // Materials
