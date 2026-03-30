@@ -191,6 +191,46 @@ export interface GenerateData {
 
 export type SubmissionStatus = "in_progress" | "submitted" | "graded" | "pending_review"
 
+export type MasteryLevel = "critical" | "remedial" | "average" | "good" | "mastered"
+
+export interface SubtopicMastery {
+  pct: number
+  level: MasteryLevel
+}
+
+export interface TopicToReteach {
+  subtopic: string
+  avg_pct: number
+  level: MasteryLevel
+  misconception: string
+}
+
+export interface StudentSummary {
+  student_id: string
+  name: string
+  score: number | null
+  max_score: number
+  pct: number
+  status: MasteryLevel
+  at_risk: boolean
+  weakest_subtopic: string | null
+  subtopics: Record<string, number>
+}
+
+export interface DiagnosticReport {
+  id: string
+  assessment_id: string
+  class_id: string
+  avg_score: number
+  mastery_rate: number
+  score_distribution: Record<string, number>
+  subtopic_mastery: Record<string, SubtopicMastery>
+  topics_to_reteach: TopicToReteach[]
+  class_strengths: { subtopic: string; avg_pct: number }[]
+  student_summaries: StudentSummary[]
+  generated_at: string
+}
+
 export interface StudentAssessmentItem {
   id: string
   title: string
@@ -292,6 +332,19 @@ export const api = {
   },
   deleteQuestion(id: string) {
     return req<void>(`/api/v1/questions/${id}`, { method: "DELETE" })
+  },
+
+  // Diagnostics
+  getDiagnostics(assessmentId: string) {
+    return req<DiagnosticReport | null>(`/api/v1/assessments/${assessmentId}/diagnostics`)
+  },
+  generateDiagnostics(assessmentId: string) {
+    return req<DiagnosticReport>(`/api/v1/assessments/${assessmentId}/diagnostics/generate`, {
+      method: "POST",
+    })
+  },
+  getStudentDiagnostics(assessmentId: string) {
+    return req<StudentSummary[]>(`/api/v1/assessments/${assessmentId}/diagnostics/students`)
   },
 
   // Student
