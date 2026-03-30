@@ -305,19 +305,8 @@ export default function ExamPage() {
       try {
         let sub: Submission
         if (existingSubId) {
-          // Resume: fetch existing submission (which has questions attached)
-          const existing = await req<Submission & { questions?: Question[] }>(
-            `/api/v1/submissions/${existingSubId}`
-          )
-          // If questions aren't on the submission, we need to start fresh
-          // but since status is in_progress we just need the submission + questions
-          if (!existing.questions || existing.questions.length === 0) {
-            // Fetch questions separately from assessment
-            const assessment = await req<{ questions: Question[] }>(`/api/v1/assessments/${assessmentId}`)
-            sub = { ...existing, questions: assessment.questions ?? [] }
-          } else {
-            sub = existing as Submission
-          }
+          // Resume: use dedicated endpoint that returns submission + questions
+          sub = await req<Submission>(`/api/v1/submissions/${existingSubId}/resume`)
         } else {
           sub = await req<Submission>("/api/v1/submissions", {
             method: "POST",

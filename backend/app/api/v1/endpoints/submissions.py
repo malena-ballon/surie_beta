@@ -54,9 +54,15 @@ async def start_exam(
         raise HTTPException(status_code=400, detail="Assessment is not published")
 
     now = datetime.now(timezone.utc)
-    if assessment.start_at and now < assessment.start_at.replace(tzinfo=timezone.utc):
+
+    def _to_utc(dt: datetime) -> datetime:
+        if dt.tzinfo is None:
+            return dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(timezone.utc)
+
+    if assessment.start_at and now < _to_utc(assessment.start_at):
         raise HTTPException(status_code=400, detail="Exam has not started yet")
-    if assessment.end_at and now > assessment.end_at.replace(tzinfo=timezone.utc):
+    if assessment.end_at and now > _to_utc(assessment.end_at):
         raise HTTPException(status_code=400, detail="Exam has already ended")
 
     # Check for existing submission
@@ -208,6 +214,30 @@ async def submit_exam(
     return SubmissionWithResponses(
         **SubmissionItem.model_validate(submission).model_dump(),
         responses=[ResponseItem.model_validate(r) for r in responses],
+    )
+
+
+# ── Resume submission (returns questions, no correct answers) ─
+
+
+@router.get("/{submission_id}/resume", response_model=SubmissionWithQuestions)
+async def resume_exam(
+    submission_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> SubmissionWithQuestions:
+    submission = await _get_submission_or_403(submission_id, db, current_user)
+
+    q_result = await db.execute(
+        select(Question)
+        .where(Question.assessment_id == submission.assessment_id)
+        .order_by(Question.display_order)
+    )
+    questions = q_result.scalars().all()
+
+    return SubmissionWithQuestions(
+        **SubmissionItem.model_validate(submission).model_dump(),
+        questions=[QuestionForStudent.model_validate(q) for q in questions],
     )
 
 
