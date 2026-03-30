@@ -1,3 +1,9 @@
+import { Suspense } from "react"
+
 export default function ExamLayout({ children }: { children: React.ReactNode }) {
-  return <>{children}</>
+  return (
+    <Suspense>
+      {children}
+    </Suspense>
+  )
 }

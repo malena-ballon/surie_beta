@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useRef, useState } from "react"
-import { useParams, useRouter } from "next/navigation"
+import { useParams, useRouter, useSearchParams } from "next/navigation"
 import { Check, ChevronLeft, ChevronRight, Clock } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
@@ -270,8 +270,10 @@ function ConfirmDialog({
 
 export default function ExamPage() {
   const params = useParams<{ id: string }>()
+  const searchParams = useSearchParams()
   const router = useRouter()
   const assessmentId = params.id
+  const existingSubId = searchParams.get("sub")
 
   const [submission, setSubmission] = useState<Submission | null>(null)
   const [answers, setAnswers] = useState<Record<string, string>>({})
@@ -297,14 +299,31 @@ export default function ExamPage() {
     loadAssessment()
   }, [assessmentId])
 
-  // Start submission
+  // Start or resume submission
   useEffect(() => {
     const start = async () => {
       try {
-        const sub = await req<Submission>("/api/v1/submissions", {
-          method: "POST",
-          body: JSON.stringify({ assessment_id: assessmentId }),
-        })
+        let sub: Submission
+        if (existingSubId) {
+          // Resume: fetch existing submission (which has questions attached)
+          const existing = await req<Submission & { questions?: Question[] }>(
+            `/api/v1/submissions/${existingSubId}`
+          )
+          // If questions aren't on the submission, we need to start fresh
+          // but since status is in_progress we just need the submission + questions
+          if (!existing.questions || existing.questions.length === 0) {
+            // Fetch questions separately from assessment
+            const assessment = await req<{ questions: Question[] }>(`/api/v1/assessments/${assessmentId}`)
+            sub = { ...existing, questions: assessment.questions ?? [] }
+          } else {
+            sub = existing as Submission
+          }
+        } else {
+          sub = await req<Submission>("/api/v1/submissions", {
+            method: "POST",
+            body: JSON.stringify({ assessment_id: assessmentId }),
+          })
+        }
         setSubmission(sub)
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : "Failed to start exam"
@@ -315,7 +334,7 @@ export default function ExamPage() {
       }
     }
     start()
-  }, [assessmentId, router])
+  }, [assessmentId, existingSubId, router])
 
   // Auto-save every 30s
   useEffect(() => {
@@ -391,7 +410,7 @@ export default function ExamPage() {
   }
 
   if (result) {
-    return <ResultScreen result={result} onReturn={() => router.push("/dashboard")} />
+    return <ResultScreen result={result} onReturn={() => router.push("/student")} />
   }
 
   if (!submission) return null

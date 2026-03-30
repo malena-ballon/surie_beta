@@ -108,7 +108,7 @@ function ExamAction({
   if (state === "in_progress" && item.submission_id) {
     return (
       <Link
-        href={`/exam/${item.id}`}
+        href={`/exam/${item.id}?sub=${item.submission_id}`}
         className={cn(
           "inline-flex items-center gap-1.5 px-4 py-2 rounded-[10px] text-sm font-semibold font-body",
           "bg-accent-500 text-white hover:bg-accent-600 transition-colors duration-[150ms]"
