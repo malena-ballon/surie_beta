@@ -290,44 +290,54 @@ async def generate_questions(
     if not material or not material.content_text:
         raise HTTPException(status_code=400, detail="Source material has no extractable text")
 
+    # Capture values before releasing DB session
+    content_text = material.content_text
+    difficulty_value = assessment.difficulty.value
+
+    # Close DB session before long Anthropic call to avoid connection timeout
+    await db.close()
+
     try:
         generated = await generate_exam_questions(
-            source_text=material.content_text,
+            source_text=content_text,
             question_breakdown=body.question_breakdown,
-            difficulty=assessment.difficulty.value,
+            difficulty=difficulty_value,
             subject=body.subject,
             grade_level=body.grade_level,
         )
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"AI generation failed: {exc}")
 
-    max_order = await db.scalar(
-        select(func.max(Question.display_order)).where(Question.assessment_id == assessment_id)
-    ) or 0
+    # Reopen session to save results
+    from app.core.database import AsyncSessionLocal
+    async with AsyncSessionLocal() as save_db:
+        max_order = await save_db.scalar(
+            select(func.max(Question.display_order)).where(Question.assessment_id == assessment_id)
+        ) or 0
 
-    questions: list[Question] = []
-    for i, q_data in enumerate(generated):
-        q = Question(
-            assessment_id=assessment_id,
-            question_text=q_data["question_text"],
-            question_type=q_data["question_type"],
-            choices=q_data.get("choices"),
-            correct_answer=q_data.get("correct_answer", ""),
-            explanation=q_data.get("explanation"),
-            subtopic_tags=q_data.get("subtopic_tags"),
-            blooms_level=q_data.get("blooms_level"),
-            difficulty=q_data.get("difficulty"),
-            display_order=max_order + i + 1,
-            created_via=CreatedVia.ai,
-        )
-        db.add(q)
-        questions.append(q)
+        questions: list[Question] = []
+        for i, q_data in enumerate(generated):
+            q = Question(
+                assessment_id=assessment_id,
+                question_text=q_data["question_text"],
+                question_type=q_data["question_type"],
+                choices=q_data.get("choices"),
+                correct_answer=q_data.get("correct_answer", ""),
+                explanation=q_data.get("explanation"),
+                subtopic_tags=q_data.get("subtopic_tags"),
+                blooms_level=q_data.get("blooms_level"),
+                difficulty=q_data.get("difficulty"),
+                display_order=max_order + i + 1,
+                created_via=CreatedVia.ai,
+            )
+            save_db.add(q)
+            questions.append(q)
 
-    await db.commit()
-    for q in questions:
-        await db.refresh(q)
+        await save_db.commit()
+        for q in questions:
+            await save_db.refresh(q)
 
-    return [QuestionItem.model_validate(q) for q in questions]
+        return [QuestionItem.model_validate(q) for q in questions]
 
 
 # ── Update question ───────────────────────────────────────────
