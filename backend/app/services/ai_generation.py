@@ -73,6 +73,8 @@ def _extract_json(text: str) -> list[dict]:
 
 
 async def _call_anthropic(system: str, messages: list[dict]) -> str:
+    import logging
+    logger = logging.getLogger(__name__)
     async with httpx.AsyncClient(timeout=120.0) as client:
         response = await client.post(
             ANTHROPIC_API_URL,
@@ -88,6 +90,8 @@ async def _call_anthropic(system: str, messages: list[dict]) -> str:
                 "messages": messages,
             },
         )
+        if not response.is_success:
+            logger.error("Anthropic API error %s: %s", response.status_code, response.text)
         response.raise_for_status()
         data = response.json()
         return data["content"][0]["text"]
