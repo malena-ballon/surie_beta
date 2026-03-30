@@ -243,7 +243,7 @@ async def list_student_assessments(
 ) -> list[StudentAssessmentItem]:
     # Get enrolled class IDs
     enroll_result = await db.execute(
-        select(Enrollment.classroom_id).where(Enrollment.student_id == current_user.id)
+        select(Enrollment.class_id).where(Enrollment.student_id == current_user.id)
     )
     class_ids = [r for r in enroll_result.scalars().all()]
 
