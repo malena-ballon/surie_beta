@@ -4,12 +4,16 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import {
   ArrowLeft,
+  Bot,
   CheckCircle2,
   ChevronDown,
   ChevronUp,
   FileText,
   Loader2,
+  MessageSquare,
   Plus,
+  Send,
+  Sparkles,
   Trash2,
   Upload,
   X,
@@ -455,6 +459,228 @@ function Step1({ classes, onDone }: Step1Props) {
 }
 
 // ══════════════════════════════════════════════════════════════
+// AI CHAT PANEL
+// ══════════════════════════════════════════════════════════════
+
+const QUICK_ACTIONS = [
+  { label: "Make it harder", message: "Make this question more challenging by increasing complexity and requiring deeper analysis." },
+  { label: "Simplify language", message: "Simplify the language to be clearer and more accessible for students." },
+  { label: "Better distractors", message: "Improve the wrong answer choices to be more plausible and educational distractors." },
+  { label: "Add context", message: "Add a real-world scenario or context to make the question more engaging and applied." },
+]
+
+interface ChatMessage {
+  role: "user" | "ai"
+  text: string
+  suggestion?: Partial<QuestionItem>
+  dismissed?: boolean
+}
+
+function AIChatPanel({
+  question,
+  onApply,
+}: {
+  question: QuestionItem
+  onApply: (patch: Partial<QuestionItem>) => void
+}) {
+  const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [input, setInput] = useState("")
+  const [loading, setLoading] = useState(false)
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const prevQuestionId = useRef<string>(question.id)
+
+  // Clear chat when switching questions
+  useEffect(() => {
+    if (prevQuestionId.current !== question.id) {
+      setMessages([])
+      prevQuestionId.current = question.id
+    }
+  }, [question.id])
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+    }
+  }, [messages, loading])
+
+  const sendMessage = async (text: string) => {
+    if (!text.trim() || loading) return
+    setMessages((m) => [...m, { role: "user", text }])
+    setInput("")
+    setLoading(true)
+    try {
+      const res = await api.chatQuestion(question.id, text)
+      setMessages((m) => [
+        ...m,
+        {
+          role: "ai",
+          text: res.message,
+          suggestion: res.updated_question ?? undefined,
+        },
+      ])
+    } catch {
+      setMessages((m) => [
+        ...m,
+        { role: "ai", text: "Sorry, something went wrong. Please try again." },
+      ])
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const dismiss = (idx: number) =>
+    setMessages((m) => m.map((msg, i) => (i === idx ? { ...msg, dismissed: true } : msg)))
+
+  const apply = (idx: number) => {
+    const msg = messages[idx]
+    if (msg.suggestion) {
+      onApply(msg.suggestion)
+      dismiss(idx)
+      toast.success("Changes applied!")
+    }
+  }
+
+  return (
+    <div className="w-[300px] shrink-0 bg-white rounded-[14px] border border-border-light shadow-card flex flex-col overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-border-light shrink-0">
+        <div className="w-6 h-6 rounded-full bg-brand-gradient flex items-center justify-center">
+          <Sparkles className="w-3.5 h-3.5 text-white" />
+        </div>
+        <span className="font-display font-semibold text-sm text-ink-primary">AI Assistant</span>
+      </div>
+
+      {/* Quick actions */}
+      <div className="px-3 py-2.5 border-b border-border-light shrink-0">
+        <div className="flex flex-wrap gap-1.5">
+          {QUICK_ACTIONS.map((a) => (
+            <button
+              key={a.label}
+              onClick={() => sendMessage(a.message)}
+              disabled={loading}
+              className="text-[11px] font-body font-medium px-2.5 py-1 rounded-full border border-border-default text-ink-secondary hover:border-primary-500 hover:text-primary-500 hover:bg-primary-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {a.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Messages */}
+      <div ref={scrollRef} className="flex-1 overflow-y-auto p-3 space-y-3 min-h-0">
+        {messages.length === 0 && (
+          <div className="flex flex-col items-center justify-center h-full gap-2 text-center py-10">
+            <MessageSquare className="w-7 h-7 text-ink-tertiary/40" strokeWidth={1.5} />
+            <p className="font-body text-[12px] text-ink-tertiary leading-relaxed max-w-[180px]">
+              Ask AI to refine this question, or tap a quick action above.
+            </p>
+          </div>
+        )}
+
+        {messages.map((msg, idx) => (
+          <div
+            key={idx}
+            className={cn("flex flex-col gap-1.5", msg.role === "user" ? "items-end" : "items-start")}
+          >
+            {/* Bubble */}
+            <div
+              className={cn(
+                "max-w-[92%] px-3 py-2.5 text-[12px] font-body leading-relaxed",
+                msg.role === "user"
+                  ? "bg-primary-500 text-white rounded-[12px] rounded-tr-[4px]"
+                  : "bg-surface-secondary text-ink-primary rounded-[12px] rounded-tl-[4px]"
+              )}
+            >
+              {msg.role === "ai" && (
+                <div className="flex items-center gap-1 mb-1.5">
+                  <Bot className="w-3 h-3 text-primary-500" />
+                  <span className="text-[10px] font-semibold text-primary-500">Surie AI</span>
+                </div>
+              )}
+              <span className="whitespace-pre-wrap">{msg.text}</span>
+            </div>
+
+            {/* Suggestion card */}
+            {msg.role === "ai" && msg.suggestion && !msg.dismissed && (
+              <div className="w-full border border-primary-200 bg-primary-50 rounded-[10px] p-3 space-y-2">
+                <p className="text-[10px] font-semibold font-body text-primary-600 uppercase tracking-wide">
+                  Suggested Changes
+                </p>
+                {msg.suggestion.question_text && (
+                  <p className="text-[12px] font-body text-ink-primary leading-relaxed line-clamp-3">
+                    {msg.suggestion.question_text}
+                  </p>
+                )}
+                {msg.suggestion.choices && (
+                  <div className="space-y-1">
+                    {msg.suggestion.choices.map((c) => (
+                      <div key={c.label} className={cn("text-[11px] font-body px-2 py-1 rounded-[6px]", c.is_correct ? "bg-green-100 text-green-700 font-semibold" : "text-ink-secondary")}>
+                        {c.label}. {c.text}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div className="flex gap-2 pt-1">
+                  <button
+                    onClick={() => apply(idx)}
+                    className="flex-1 h-8 rounded-[8px] bg-primary-500 text-white text-[11px] font-semibold font-body hover:bg-primary-600 transition-colors"
+                  >
+                    Apply Changes
+                  </button>
+                  <button
+                    onClick={() => dismiss(idx)}
+                    className="h-8 px-2.5 rounded-[8px] border border-border-default text-[11px] font-body text-ink-secondary hover:border-ink-secondary transition-colors"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+
+        {/* Typing indicator */}
+        {loading && (
+          <div className="flex items-start">
+            <div className="bg-surface-secondary rounded-[12px] rounded-tl-[4px] px-4 py-3 flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-ink-tertiary animate-bounce [animation-delay:0ms]" />
+              <span className="w-1.5 h-1.5 rounded-full bg-ink-tertiary animate-bounce [animation-delay:150ms]" />
+              <span className="w-1.5 h-1.5 rounded-full bg-ink-tertiary animate-bounce [animation-delay:300ms]" />
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Input */}
+      <div className="px-3 pb-3 pt-2 border-t border-border-light shrink-0">
+        <div className="flex items-end gap-2">
+          <textarea
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault()
+                sendMessage(input)
+              }
+            }}
+            placeholder="Ask AI to edit this question…"
+            rows={2}
+            className="flex-1 text-[12px] font-body text-ink-primary placeholder:text-ink-tertiary bg-surface-secondary border border-border-light rounded-[10px] px-3 py-2 resize-none focus:outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500/20 transition-colors leading-relaxed"
+          />
+          <button
+            onClick={() => sendMessage(input)}
+            disabled={loading || !input.trim()}
+            className="w-9 h-9 rounded-[10px] bg-primary-500 flex items-center justify-center text-white hover:bg-primary-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shrink-0"
+          >
+            <Send className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ══════════════════════════════════════════════════════════════
 // STEP 2 — Review & Edit
 // ══════════════════════════════════════════════════════════════
 
@@ -712,9 +938,9 @@ function Step2({ assessment, initialQuestions, onDone }: Step2Props) {
   }
 
   return (
-    <div className="flex gap-6 h-[calc(100vh-260px)]">
+    <div className="flex gap-5 h-[calc(100vh-260px)]">
       {/* Sidebar */}
-      <div className="w-64 shrink-0 bg-white rounded-[14px] border border-border-light shadow-card flex flex-col overflow-hidden">
+      <div className="w-56 shrink-0 bg-white rounded-[14px] border border-border-light shadow-card flex flex-col overflow-hidden">
         <div className="flex items-center justify-between px-4 py-3 border-b border-border-light">
           <span className="font-display font-semibold text-sm text-ink-primary">
             Questions
@@ -764,7 +990,7 @@ function Step2({ assessment, initialQuestions, onDone }: Step2Props) {
       </div>
 
       {/* Editor */}
-      <div className="flex-1 overflow-y-auto pr-1">
+      <div className="flex-1 min-w-0 overflow-y-auto pr-1">
         {selectedQuestion ? (
           <QuestionEditor
             key={selectedQuestion.id}
@@ -778,6 +1004,14 @@ function Step2({ assessment, initialQuestions, onDone }: Step2Props) {
           </div>
         )}
       </div>
+
+      {/* AI Chat Panel */}
+      {selectedQuestion && (
+        <AIChatPanel
+          question={selectedQuestion}
+          onApply={(patch) => handleChange(selectedQuestion.id, patch)}
+        />
+      )}
     </div>
   )
 }

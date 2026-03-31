@@ -333,6 +333,12 @@ export const api = {
   deleteQuestion(id: string) {
     return req<void>(`/api/v1/questions/${id}`, { method: "DELETE" })
   },
+  chatQuestion(id: string, message: string) {
+    return req<{ message: string; updated_question: Partial<QuestionItem> | null }>(
+      `/api/v1/questions/${id}/chat`,
+      { method: "POST", body: JSON.stringify({ message }) }
+    )
+  },
 
   // Diagnostics
   getDiagnostics(assessmentId: string) {
