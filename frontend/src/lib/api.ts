@@ -346,6 +346,20 @@ export const api = {
   getStudentDiagnostics(assessmentId: string) {
     return req<StudentSummary[]>(`/api/v1/assessments/${assessmentId}/diagnostics/students`)
   },
+  generateReassessment(assessmentId: string, data: {
+    target_subtopics?: string[]
+    question_count?: number
+    difficulty?: string
+    subject?: string
+    grade_level?: string
+    mastery_threshold?: number
+  }) {
+    return req<{ id: string; title: string; class_id: string; difficulty: string; status: string }>
+      (`/api/v1/assessments/${assessmentId}/reassessment/generate`, {
+        method: "POST",
+        body: JSON.stringify(data),
+      })
+  },
 
   // Student
   getStudentAssessments() {
