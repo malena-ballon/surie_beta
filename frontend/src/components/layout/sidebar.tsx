@@ -2,6 +2,7 @@
 
 import React from "react"
 import Link from "next/link"
+import Image from "next/image"
 import { usePathname } from "next/navigation"
 import {
   LayoutDashboard,
@@ -133,9 +134,13 @@ function SidebarContent({
         )}
       >
         {collapsed && !showClose ? (
-          <span className="font-display font-bold text-[18px] bg-gradient-to-r from-primary-500 to-accent-500 bg-clip-text text-transparent">
-            S
-          </span>
+          <Image
+            src="/logo-mark.png"
+            alt="Surie"
+            width={32}
+            height={32}
+            className="object-contain"
+          />
         ) : (
           <div className="flex items-center justify-between w-full">
             <div className="flex flex-col gap-0.5">

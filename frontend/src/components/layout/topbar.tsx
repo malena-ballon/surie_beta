@@ -2,6 +2,7 @@
 
 import React from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { ChevronRight, Search, Bell, ChevronDown, LogOut, Settings, HelpCircle, Menu } from "lucide-react"
 import {
   DropdownMenu,
@@ -11,6 +12,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { useSidebar } from "@/components/layout/sidebar-context"
+import { useAuth } from "@/providers/auth-provider"
 import { cn } from "@/lib/utils"
 
 // ── Types ──────────────────────────────────────────────────────
@@ -21,7 +23,6 @@ export interface BreadcrumbItem {
 
 interface TopBarProps {
   breadcrumbs?: BreadcrumbItem[]
-  userName?: string
   hasNotifications?: boolean
 }
 
@@ -60,24 +61,42 @@ function Breadcrumb({ items }: { items: BreadcrumbItem[] }) {
   )
 }
 
-// ── Avatar initials ────────────────────────────────────────────
-function getInitials(name: string) {
-  return name
+// ── Avatar ─────────────────────────────────────────────────────
+function UserAvatar({ name, avatarUrl, size = 9 }: { name: string; avatarUrl?: string | null; size?: number }) {
+  const initials = name
     .split(" ")
-    .map((part) => part[0])
+    .map((p) => p[0])
     .slice(0, 2)
     .join("")
     .toUpperCase()
+
+  if (avatarUrl) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={avatarUrl}
+        alt={name}
+        className={`w-${size} h-${size} rounded-full object-cover shrink-0`}
+      />
+    )
+  }
+  return (
+    <div className={`w-${size} h-${size} rounded-full bg-brand-gradient flex items-center justify-center shrink-0`}>
+      <span className="text-xs font-semibold text-white font-display leading-none">{initials}</span>
+    </div>
+  )
 }
 
 // ── TopBar ─────────────────────────────────────────────────────
 export function TopBar({
   breadcrumbs = [{ label: "Dashboard" }],
-  userName = "Teacher Maria",
-  hasNotifications = true,
+  hasNotifications = false,
 }: TopBarProps) {
-  const initials = getInitials(userName)
+  const { user, logout } = useAuth()
   const { openMobile } = useSidebar()
+  const router = useRouter()
+
+  const displayName = user ? `${user.first_name} ${user.last_name}` : ""
 
   return (
     <header
@@ -135,20 +154,28 @@ export function TopBar({
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button className="flex items-center gap-2 rounded-[10px] px-2 py-1.5 hover:bg-surface-secondary transition-colors duration-[150ms] outline-none focus-visible:ring-2 focus-visible:ring-primary-500">
-              <div className="w-9 h-9 rounded-full bg-primary-100 flex items-center justify-center shrink-0">
-                <span className="text-xs font-semibold text-primary-600 font-display leading-none">
-                  {initials}
-                </span>
-              </div>
-              <span className="hidden sm:block text-sm font-medium text-ink-primary leading-none">
-                {userName}
+              <UserAvatar name={displayName || "U"} avatarUrl={user?.avatar_url} />
+              <span className="hidden sm:block text-sm font-medium text-ink-primary leading-none max-w-[120px] truncate">
+                {user?.first_name ?? ""}
               </span>
               <ChevronDown className="w-3.5 h-3.5 text-ink-tertiary" strokeWidth={2} />
             </button>
           </DropdownMenuTrigger>
 
-          <DropdownMenuContent align="end" sideOffset={8} className="w-48">
-            <DropdownMenuItem className="gap-2 cursor-pointer">
+          <DropdownMenuContent align="end" sideOffset={8} className="w-52">
+            {/* User info header */}
+            <div className="px-3 py-2.5 border-b border-border-light mb-1">
+              <p className="text-[13px] font-semibold font-display text-ink-primary truncate">
+                {displayName}
+              </p>
+              <p className="text-[11px] font-body text-ink-tertiary truncate mt-0.5">
+                {user?.email ?? ""}
+              </p>
+            </div>
+            <DropdownMenuItem
+              className="gap-2 cursor-pointer"
+              onClick={() => router.push("/dashboard/settings")}
+            >
               <Settings className="w-4 h-4 text-ink-tertiary" strokeWidth={1.75} />
               Account Settings
             </DropdownMenuItem>
@@ -157,7 +184,10 @@ export function TopBar({
               Help
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="gap-2 cursor-pointer text-danger-500 focus:text-danger-500 focus:bg-danger-50">
+            <DropdownMenuItem
+              className="gap-2 cursor-pointer text-danger-500 focus:text-danger-500 focus:bg-danger-50"
+              onClick={logout}
+            >
               <LogOut className="w-4 h-4" strokeWidth={1.75} />
               Sign Out
             </DropdownMenuItem>
