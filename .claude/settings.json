@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(alembic init:*)",
+      "Bash(python -c \"from app.models import *; print\\(''imports OK''\\)\")",
+      "Bash(alembic revision:*)",
+      "Bash(alembic upgrade:*)",
+      "Bash(python -c \"from app.api.v1.endpoints.classes import router; print\\(''classes router OK''\\)\")",
+      "Bash(curl -s http://localhost:8000/api/v1/auth/me)",
+      "Bash(python -c \":*)",
+      "Bash(python -c \"import pdfplumber; import docx; print\\(''OK''\\)\")"
+    ],
+    "additionalDirectories": [
+      "/Users/malenarizballon/Desktop/surie/frontend/src/app/dashboard/classes"
+    ]
+  }
+}
