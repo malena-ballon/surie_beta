@@ -2,7 +2,7 @@
 
 import React from "react"
 import Link from "next/link"
-import { ChevronRight, Search, Bell, ChevronDown, LogOut, Settings, HelpCircle } from "lucide-react"
+import { ChevronRight, Search, Bell, ChevronDown, LogOut, Settings, HelpCircle, Menu } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -10,6 +10,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { useSidebar } from "@/components/layout/sidebar-context"
 import { cn } from "@/lib/utils"
 
 // ── Types ──────────────────────────────────────────────────────
@@ -27,7 +28,7 @@ interface TopBarProps {
 // ── Breadcrumb ─────────────────────────────────────────────────
 function Breadcrumb({ items }: { items: BreadcrumbItem[] }) {
   return (
-    <nav aria-label="Breadcrumb" className="flex items-center gap-1">
+    <nav aria-label="Breadcrumb" className="flex items-center gap-1 min-w-0">
       {items.map((item, index) => {
         const isLast = index === items.length - 1
         return (
@@ -38,7 +39,7 @@ function Breadcrumb({ items }: { items: BreadcrumbItem[] }) {
             {isLast || !item.href ? (
               <span
                 className={cn(
-                  "text-sm font-medium leading-none",
+                  "text-sm font-medium leading-none truncate",
                   isLast ? "text-ink-primary" : "text-ink-tertiary"
                 )}
               >
@@ -47,7 +48,7 @@ function Breadcrumb({ items }: { items: BreadcrumbItem[] }) {
             ) : (
               <Link
                 href={item.href}
-                className="text-sm font-medium leading-none text-ink-tertiary hover:text-ink-primary transition-colors duration-[150ms]"
+                className="text-sm font-medium leading-none text-ink-tertiary hover:text-ink-primary transition-colors duration-[150ms] truncate"
               >
                 {item.label}
               </Link>
@@ -76,18 +77,28 @@ export function TopBar({
   hasNotifications = true,
 }: TopBarProps) {
   const initials = getInitials(userName)
+  const { openMobile } = useSidebar()
 
   return (
     <header
-      className="h-16 shrink-0 sticky top-0 z-40 flex items-center gap-4 px-6 border-b border-border-light topbar-glass"
+      className="h-16 shrink-0 sticky top-0 z-40 flex items-center gap-3 px-4 md:px-6 border-b border-border-light topbar-glass"
       style={{ backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)" }}
     >
+      {/* Hamburger — mobile only */}
+      <button
+        onClick={openMobile}
+        className="md:hidden w-9 h-9 flex items-center justify-center rounded-[10px] text-ink-secondary hover:bg-surface-secondary transition-colors shrink-0"
+        aria-label="Open menu"
+      >
+        <Menu className="w-5 h-5" strokeWidth={1.75} />
+      </button>
+
       {/* LEFT — Breadcrumb */}
       <div className="flex-1 min-w-0">
         <Breadcrumb items={breadcrumbs} />
       </div>
 
-      {/* CENTER — Search */}
+      {/* CENTER — Search (hidden on mobile) */}
       <div className="hidden md:flex items-center relative w-full max-w-[320px]">
         <Search
           className="absolute left-3 w-4 h-4 text-ink-tertiary pointer-events-none"
@@ -108,7 +119,7 @@ export function TopBar({
       </div>
 
       {/* RIGHT — Notification + User */}
-      <div className="flex items-center gap-3 shrink-0">
+      <div className="flex items-center gap-2 shrink-0">
         {/* Notification bell */}
         <button
           className="relative w-9 h-9 flex items-center justify-center rounded-[10px] text-ink-secondary hover:bg-surface-secondary hover:text-ink-primary transition-colors duration-[150ms]"
@@ -124,7 +135,6 @@ export function TopBar({
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button className="flex items-center gap-2 rounded-[10px] px-2 py-1.5 hover:bg-surface-secondary transition-colors duration-[150ms] outline-none focus-visible:ring-2 focus-visible:ring-primary-500">
-              {/* Avatar circle */}
               <div className="w-9 h-9 rounded-full bg-primary-100 flex items-center justify-center shrink-0">
                 <span className="text-xs font-semibold text-primary-600 font-display leading-none">
                   {initials}

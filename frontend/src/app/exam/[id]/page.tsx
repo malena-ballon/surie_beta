@@ -421,12 +421,12 @@ export default function ExamPage() {
 
       <div className="min-h-screen bg-surface-body flex flex-col">
         {/* Top bar */}
-        <div className="fixed top-0 left-0 right-0 h-16 bg-white shadow-sm z-40 flex items-center px-6 gap-4">
-          <span className="font-display font-semibold text-base text-ink-primary flex-1 truncate">
+        <div className="fixed top-0 left-0 right-0 h-14 md:h-16 bg-white shadow-sm z-40 flex items-center px-4 md:px-6 gap-3">
+          <span className="font-display font-semibold text-sm md:text-base text-ink-primary flex-1 truncate">
             Exam
           </span>
           <div className={cn(
-            "font-mono text-xl font-bold tabular-nums",
+            "font-mono text-base md:text-xl font-bold tabular-nums shrink-0",
             isNearEnd ? "text-red-500" : "text-ink-primary"
           )}>
             {secs !== null ? formatTime(secs) : "--:--:--"}
@@ -435,7 +435,7 @@ export default function ExamPage() {
             onClick={() => handleSubmit(false)}
             disabled={submitting}
             className={cn(
-              "px-5 py-2 rounded-xl text-sm font-semibold font-body transition-all",
+              "px-3 md:px-5 py-2 rounded-xl text-sm font-semibold font-body transition-all shrink-0",
               isNearEnd
                 ? "bg-red-500 hover:bg-red-600 text-white"
                 : "bg-surface-secondary text-ink-secondary hover:bg-border-light"
@@ -472,7 +472,7 @@ export default function ExamPage() {
         </div>
 
         {/* Main */}
-        <div className="flex-1 pt-[112px] pb-24 px-4">
+        <div className="flex-1 pt-[100px] md:pt-[112px] pb-24 px-4">
           <div className="max-w-[720px] mx-auto py-6">
             <div className="bg-white rounded-2xl shadow-card p-8">
               {/* Overline */}

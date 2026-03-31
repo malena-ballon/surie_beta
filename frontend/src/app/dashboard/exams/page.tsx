@@ -179,25 +179,26 @@ export default function ExamsPage() {
   }
 
   return (
-    <div className="p-8 max-w-[1280px] mx-auto">
+    <div className="p-4 md:p-8 max-w-[1280px] mx-auto">
       {/* Header */}
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex items-start justify-between gap-3 mb-6 md:mb-8">
         <div>
-          <h1 className="font-display font-bold text-[30px] text-ink-primary leading-tight">
+          <h1 className="font-display font-bold text-[24px] md:text-[30px] text-ink-primary leading-tight">
             Exam Library
           </h1>
-          <p className="font-body text-sm text-ink-secondary mt-1">
+          <p className="font-body text-sm text-ink-secondary mt-1 hidden sm:block">
             Create, manage, and assign assessments to your classes
           </p>
         </div>
-        <Button variant="gradient" size="lg" onClick={() => router.push("/dashboard/exams/create")}>
+        <Button variant="gradient" size="default" onClick={() => router.push("/dashboard/exams/create")} className="shrink-0">
           <Plus className="w-4 h-4" />
-          Create Exam
+          <span className="hidden sm:inline">Create Exam</span>
+          <span className="sm:hidden">Create</span>
         </Button>
       </div>
 
       {/* Filter bar */}
-      <div className="flex items-center gap-3 mb-6 flex-wrap">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 mb-6">
         {/* Status tabs */}
         <div className="flex items-center bg-surface-secondary rounded-[10px] p-1 gap-0.5">
           {STATUS_TABS.map((tab) => (

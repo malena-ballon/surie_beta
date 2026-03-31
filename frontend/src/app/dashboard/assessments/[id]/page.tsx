@@ -409,8 +409,8 @@ function ReassessmentModal({
     "w-full h-[42px] px-[14px] text-sm font-body text-ink-primary placeholder:text-ink-tertiary bg-white border border-border-default rounded-[10px] focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-colors"
 
   return (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-[20px] shadow-2xl w-full max-w-[560px] max-h-[90vh] flex flex-col">
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center sm:p-4">
+      <div className="bg-white rounded-t-[20px] sm:rounded-[20px] shadow-2xl w-full sm:max-w-[560px] h-[92vh] sm:h-auto sm:max-h-[90vh] flex flex-col">
 
         {/* Generating overlay */}
         {generating && (
@@ -593,7 +593,7 @@ export default function AssessmentDiagnosticPage() {
 
   if (loading) {
     return (
-      <div className="p-8 max-w-[1280px] mx-auto space-y-6">
+      <div className="p-4 md:p-8 max-w-[1280px] mx-auto space-y-6">
         <Skeleton className="h-10 w-64" />
         <div className="grid grid-cols-3 gap-5">
           {[0, 1, 2].map((i) => <Skeleton key={i} className="h-24 rounded-[14px]" />)}
@@ -687,7 +687,7 @@ export default function AssessmentDiagnosticPage() {
       {report && (
         <>
           {/* Stat cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
             <StatCard
               label="Average Score"
               value={`${report.avg_score}%`}
@@ -712,13 +712,13 @@ export default function AssessmentDiagnosticPage() {
           </div>
 
           {/* Charts row */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
             <ScoreDistributionChart data={report.score_distribution} />
             <SubtopicHeatmap data={report.subtopic_mastery} />
           </div>
 
           {/* Reteach + Student table */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
             <ReteachPanel topics={report.topics_to_reteach} />
             <StudentTable students={report.student_summaries} />
           </div>
@@ -747,7 +747,7 @@ export default function AssessmentDiagnosticPage() {
           )}
 
           {/* Action row */}
-          <div className="flex items-center gap-3 pb-4">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 pb-4">
             <Button variant="gradient" size="lg" onClick={() => setShowReassessModal(true)}>
               <Zap className="w-4 h-4" />
               Generate Re-Assessment

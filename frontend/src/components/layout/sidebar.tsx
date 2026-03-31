@@ -12,6 +12,7 @@ import {
   Settings,
   ChevronsLeft,
   ChevronsRight,
+  X,
   type LucideIcon,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -49,24 +50,24 @@ function NavLink({
   item,
   collapsed,
   isActive,
+  onClick,
 }: {
   item: NavItem
   collapsed: boolean
   isActive: boolean
+  onClick?: () => void
 }) {
   const Icon = item.icon
 
   const linkContent = (
     <Link
       href={item.href}
+      onClick={onClick}
       className={cn(
-        // Base
         "flex items-center gap-3 rounded-[10px] mx-3 my-0.5",
         "transition-all duration-[150ms] ease-[cubic-bezier(0.4,0,0.2,1)]",
         "border-l-[3px] outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-1",
-        // Collapsed: centered icon only
         collapsed ? "justify-center px-0 py-2.5 w-12 mx-auto" : "px-4 py-2.5",
-        // Active vs inactive
         isActive
           ? "border-primary-500 bg-brand-gradient-subtle text-primary-600"
           : "border-transparent text-ink-secondary hover:bg-surface-secondary hover:text-ink-primary"
@@ -75,7 +76,7 @@ function NavLink({
       <Icon
         className={cn(
           "shrink-0 w-5 h-5",
-          isActive ? "text-primary-500" : "text-ink-tertiary group-hover:text-ink-primary"
+          isActive ? "text-primary-500" : "text-ink-tertiary"
         )}
         strokeWidth={1.75}
       />
@@ -102,42 +103,41 @@ function NavLink({
 // ── Separator ──────────────────────────────────────────────────
 function NavSeparator({ collapsed }: { collapsed: boolean }) {
   return (
-    <div
-      className={cn(
-        "my-2 h-px bg-border-light",
-        collapsed ? "mx-4" : "mx-5"
-      )}
-    />
+    <div className={cn("my-2 h-px bg-border-light", collapsed ? "mx-4" : "mx-5")} />
   )
 }
 
-// ── Sidebar ────────────────────────────────────────────────────
-export function Sidebar() {
-  const { collapsed, toggle } = useSidebar()
-  const pathname = usePathname()
-
-  // Match active: exact for /dashboard, prefix for nested
-  const isActive = (href: string) =>
-    href === "/dashboard" ? pathname === href : pathname.startsWith(href)
-
+// ── Sidebar content (shared between mobile and desktop) ────────
+function SidebarContent({
+  collapsed,
+  toggle,
+  isActive,
+  onNavClick,
+  showClose,
+  onClose,
+}: {
+  collapsed: boolean
+  toggle: () => void
+  isActive: (href: string) => boolean
+  onNavClick?: () => void
+  showClose?: boolean
+  onClose?: () => void
+}) {
   return (
-    <TooltipProvider delayDuration={0}>
-      <aside
+    <>
+      {/* ── Logo ── */}
+      <div
         className={cn(
-          "flex flex-col h-screen bg-white border-r border-border-light",
-          "transition-[width] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]",
-          "shrink-0 overflow-hidden",
-          collapsed ? "w-[72px]" : "w-[260px]"
+          "flex items-center h-16 shrink-0 border-b border-border-light",
+          collapsed ? "justify-center px-0" : "px-4"
         )}
       >
-        {/* ── Logo ── */}
-        <div
-          className={cn(
-            "flex items-center h-16 shrink-0 border-b border-border-light",
-            collapsed ? "justify-center px-0" : "px-4"
-          )}
-        >
-          {!collapsed && (
+        {collapsed && !showClose ? (
+          <span className="font-display font-bold text-[18px] bg-gradient-to-r from-primary-500 to-accent-500 bg-clip-text text-transparent">
+            S
+          </span>
+        ) : (
+          <div className="flex items-center justify-between w-full">
             <div className="flex flex-col gap-0.5">
               <span className="font-display font-bold text-[22px] leading-none bg-gradient-to-r from-primary-500 to-accent-500 bg-clip-text text-transparent tracking-tight">
                 SURIE
@@ -146,58 +146,66 @@ export function Sidebar() {
                 Teaching Smarter, Learning Better.
               </span>
             </div>
-          )}
-        </div>
+            {showClose && (
+              <button
+                onClick={onClose}
+                className="w-8 h-8 flex items-center justify-center rounded-lg text-ink-tertiary hover:text-ink-primary hover:bg-surface-secondary transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+        )}
+      </div>
 
-        {/* ── Main nav ── */}
-        <nav className="flex flex-col flex-1 overflow-y-auto overflow-x-hidden py-3">
-          {/* Group 1 */}
-          {NAV_ITEMS.map((item) => (
-            <NavLink
-              key={item.href}
-              item={item}
-              collapsed={collapsed}
-              isActive={isActive(item.href)}
-            />
-          ))}
-
-          <NavSeparator collapsed={collapsed} />
-
-          {/* Group 2 */}
-          {NAV_ITEMS_2.map((item) => (
-            <NavLink
-              key={item.href}
-              item={item}
-              collapsed={collapsed}
-              isActive={isActive(item.href)}
-            />
-          ))}
-
-          <NavSeparator collapsed={collapsed} />
-
-          {/* Group 3 */}
-          {NAV_ITEMS_3.map((item) => (
-            <NavLink
-              key={item.href}
-              item={item}
-              collapsed={collapsed}
-              isActive={isActive(item.href)}
-            />
-          ))}
-
-          {/* Push Settings + toggle to bottom */}
-          <div className="flex-1" />
-
-          <NavSeparator collapsed={collapsed} />
-
-          {/* Settings */}
+      {/* ── Main nav ── */}
+      <nav className="flex flex-col flex-1 overflow-y-auto overflow-x-hidden py-3">
+        {NAV_ITEMS.map((item) => (
           <NavLink
-            item={{ label: "Settings", href: "/dashboard/settings", icon: Settings }}
+            key={item.href}
+            item={item}
             collapsed={collapsed}
-            isActive={isActive("/dashboard/settings")}
+            isActive={isActive(item.href)}
+            onClick={onNavClick}
           />
+        ))}
 
-          {/* Collapse toggle */}
+        <NavSeparator collapsed={collapsed} />
+
+        {NAV_ITEMS_2.map((item) => (
+          <NavLink
+            key={item.href}
+            item={item}
+            collapsed={collapsed}
+            isActive={isActive(item.href)}
+            onClick={onNavClick}
+          />
+        ))}
+
+        <NavSeparator collapsed={collapsed} />
+
+        {NAV_ITEMS_3.map((item) => (
+          <NavLink
+            key={item.href}
+            item={item}
+            collapsed={collapsed}
+            isActive={isActive(item.href)}
+            onClick={onNavClick}
+          />
+        ))}
+
+        <div className="flex-1" />
+        <NavSeparator collapsed={collapsed} />
+
+        <NavLink
+          item={{ label: "Settings", href: "/dashboard/settings", icon: Settings }}
+          collapsed={collapsed}
+          isActive={isActive("/dashboard/settings")}
+          onClick={onNavClick}
+        />
+
+        {/* Collapse toggle — desktop only */}
+        {!showClose && (
           <Tooltip>
             <TooltipTrigger asChild>
               <button
@@ -206,8 +214,7 @@ export function Sidebar() {
                   "flex items-center gap-3 rounded-[10px] mx-3 my-0.5 py-2.5",
                   "border-l-[3px] border-transparent",
                   "text-ink-tertiary hover:bg-surface-secondary hover:text-ink-primary",
-                  "transition-colors duration-[150ms]",
-                  "w-[calc(100%-24px)]",
+                  "transition-colors duration-[150ms] w-[calc(100%-24px)]",
                   collapsed ? "justify-center px-0 w-12 mx-auto" : "px-4"
                 )}
                 aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
@@ -228,9 +235,65 @@ export function Sidebar() {
               </TooltipContent>
             )}
           </Tooltip>
+        )}
 
-          <div className="pb-2" />
-        </nav>
+        <div className="pb-2" />
+      </nav>
+    </>
+  )
+}
+
+// ── Sidebar ────────────────────────────────────────────────────
+export function Sidebar() {
+  const { collapsed, toggle, mobileOpen, closeMobile } = useSidebar()
+  const pathname = usePathname()
+
+  const isActive = (href: string) =>
+    href === "/dashboard" ? pathname === href : pathname.startsWith(href)
+
+  return (
+    <TooltipProvider delayDuration={0}>
+      {/* ── Mobile overlay backdrop ── */}
+      {mobileOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/40 md:hidden"
+          onClick={closeMobile}
+        />
+      )}
+
+      {/* ── Mobile slide-in sidebar (fixed, out of flow) ── */}
+      <aside
+        className={cn(
+          "fixed top-0 left-0 bottom-0 z-50 w-[260px] flex flex-col bg-white border-r border-border-light",
+          "transition-transform duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]",
+          "md:hidden", // only on mobile
+          mobileOpen ? "translate-x-0" : "-translate-x-full"
+        )}
+      >
+        <SidebarContent
+          collapsed={false}
+          toggle={toggle}
+          isActive={isActive}
+          onNavClick={closeMobile}
+          showClose
+          onClose={closeMobile}
+        />
+      </aside>
+
+      {/* ── Desktop/tablet sidebar (in flex flow) ── */}
+      <aside
+        className={cn(
+          "hidden md:flex flex-col h-screen bg-white border-r border-border-light",
+          "transition-[width] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]",
+          "shrink-0 overflow-hidden",
+          collapsed ? "w-[72px]" : "w-[260px]"
+        )}
+      >
+        <SidebarContent
+          collapsed={collapsed}
+          toggle={toggle}
+          isActive={isActive}
+        />
       </aside>
     </TooltipProvider>
   )

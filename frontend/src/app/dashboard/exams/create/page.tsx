@@ -938,10 +938,10 @@ function Step2({ assessment, initialQuestions, onDone }: Step2Props) {
   }
 
   return (
-    <div className="flex gap-5 h-[calc(100vh-260px)]">
-      {/* Sidebar */}
-      <div className="w-56 shrink-0 bg-white rounded-[14px] border border-border-light shadow-card flex flex-col overflow-hidden">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-border-light">
+    <div className="flex flex-col lg:flex-row gap-5 lg:h-[calc(100vh-260px)]">
+      {/* Question list — horizontal scroll on mobile, vertical sidebar on desktop */}
+      <div className="lg:w-56 shrink-0 bg-white rounded-[14px] border border-border-light shadow-card flex flex-col overflow-hidden">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-border-light shrink-0">
           <span className="font-display font-semibold text-sm text-ink-primary">
             Questions
             <span className="ml-1.5 text-[11px] font-body text-ink-tertiary bg-surface-secondary px-1.5 py-0.5 rounded-full">
@@ -956,20 +956,21 @@ function Step2({ assessment, initialQuestions, onDone }: Step2Props) {
             <Plus className="w-3.5 h-3.5" />
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto divide-y divide-border-light">
+        {/* Mobile: horizontal, Desktop: vertical */}
+        <div className="flex lg:flex-col overflow-x-auto lg:overflow-y-auto divide-x lg:divide-x-0 lg:divide-y divide-border-light flex-1 min-h-0">
           {questions.map((q, i) => (
             <button
               key={q.id}
               onClick={() => setSelectedId(q.id)}
               className={cn(
-                "w-full text-left px-4 py-3 transition-colors flex items-start gap-2.5",
+                "lg:w-full text-left px-4 py-3 transition-colors flex flex-col lg:flex-row items-start gap-2.5 shrink-0 lg:shrink",
                 selectedId === q.id ? "bg-primary-50" : "hover:bg-surface-secondary"
               )}
             >
-              <span className="text-[11px] font-body text-ink-tertiary shrink-0 mt-0.5 w-4">
+              <span className="text-[11px] font-body text-ink-tertiary shrink-0 lg:mt-0.5 lg:w-4">
                 Q{i + 1}
               </span>
-              <div className="flex-1 min-w-0">
+              <div className="flex-1 min-w-0 hidden lg:block">
                 <p className="text-[12px] font-body text-ink-primary line-clamp-2 leading-snug">
                   {q.question_text}
                 </p>
@@ -977,20 +978,19 @@ function Step2({ assessment, initialQuestions, onDone }: Step2Props) {
                   <span className={cn("px-1.5 py-0.5 rounded text-[10px] font-semibold", TYPE_COLOR[q.question_type])}>
                     {TYPE_LABEL[q.question_type]}
                   </span>
-                  {q.subtopic_tags?.[0] && (
-                    <span className="text-[10px] font-body text-ink-tertiary truncate">
-                      {q.subtopic_tags[0]}
-                    </span>
-                  )}
                 </div>
               </div>
+              {/* Mobile: just show type badge */}
+              <span className={cn("lg:hidden px-1.5 py-0.5 rounded text-[10px] font-semibold", TYPE_COLOR[q.question_type])}>
+                {TYPE_LABEL[q.question_type]}
+              </span>
             </button>
           ))}
         </div>
       </div>
 
       {/* Editor */}
-      <div className="flex-1 min-w-0 overflow-y-auto pr-1">
+      <div className="flex-1 min-w-0 lg:overflow-y-auto lg:pr-1">
         {selectedQuestion ? (
           <QuestionEditor
             key={selectedQuestion.id}
@@ -1005,12 +1005,14 @@ function Step2({ assessment, initialQuestions, onDone }: Step2Props) {
         )}
       </div>
 
-      {/* AI Chat Panel */}
+      {/* AI Chat Panel — desktop only */}
       {selectedQuestion && (
-        <AIChatPanel
-          question={selectedQuestion}
-          onApply={(patch) => handleChange(selectedQuestion.id, patch)}
-        />
+        <div className="hidden lg:block">
+          <AIChatPanel
+            question={selectedQuestion}
+            onApply={(patch) => handleChange(selectedQuestion.id, patch)}
+          />
+        </div>
       )}
     </div>
   )
