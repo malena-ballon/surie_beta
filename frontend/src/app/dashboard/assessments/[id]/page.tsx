@@ -15,6 +15,8 @@ import {
   Download,
   RefreshCw,
   Users,
+  X,
+  Zap,
 } from "lucide-react"
 import {
   BarChart,
@@ -32,6 +34,7 @@ import {
   type DiagnosticReport,
   type MasteryLevel,
   type StudentSummary,
+  type DifficultyLevel,
 } from "@/lib/api"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -326,6 +329,233 @@ function StudentTable({ students }: { students: StudentSummary[] }) {
   )
 }
 
+// ── Re-Assessment Modal ────────────────────────────────────────
+
+const GEN_MESSAGES = [
+  "Analyzing diagnostic data…",
+  "Identifying weak subtopics…",
+  "Crafting targeted questions…",
+  "Building remediation exam…",
+]
+
+function ReassessmentModal({
+  report,
+  assessmentId,
+  onClose,
+  onSuccess,
+}: {
+  report: DiagnosticReport
+  assessmentId: string
+  onClose: () => void
+  onSuccess: (newId: string) => void
+}) {
+  const allSubtopics = Object.entries(report.subtopic_mastery).sort(
+    (a, b) => a[1].pct - b[1].pct
+  )
+  const defaultSelected = allSubtopics
+    .filter(([, d]) => d.pct < 60)
+    .map(([s]) => s)
+
+  const [selected, setSelected] = useState<Set<string>>(new Set(defaultSelected.length ? defaultSelected : allSubtopics.slice(0, 3).map(([s]) => s)))
+  const [questionCount, setQuestionCount] = useState(10)
+  const [difficulty, setDifficulty] = useState<DifficultyLevel>("medium")
+  const [subject, setSubject] = useState("")
+  const [gradeLevel, setGradeLevel] = useState("")
+  const [generating, setGenerating] = useState(false)
+  const [msgIdx, setMsgIdx] = useState(0)
+
+  useEffect(() => {
+    if (!generating) return
+    const t = setInterval(() => setMsgIdx((i) => (i + 1) % GEN_MESSAGES.length), 3000)
+    return () => clearInterval(t)
+  }, [generating])
+
+  const toggle = (s: string) =>
+    setSelected((prev) => {
+      const next = new Set(prev)
+      next.has(s) ? next.delete(s) : next.add(s)
+      return next
+    })
+
+  const readyPct = report.mastery_rate
+  const interventionPct = Math.round(
+    (report.student_summaries.filter((s) => s.pct < 60).length /
+      Math.max(1, report.student_summaries.length)) *
+      100
+  )
+
+  const handleGenerate = async () => {
+    if (selected.size === 0) {
+      toast.error("Select at least one subtopic")
+      return
+    }
+    setGenerating(true)
+    try {
+      const result = await api.generateReassessment(assessmentId, {
+        target_subtopics: Array.from(selected),
+        question_count: questionCount,
+        difficulty,
+        subject,
+        grade_level: gradeLevel,
+      })
+      onSuccess(result.id)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Generation failed")
+      setGenerating(false)
+    }
+  }
+
+  const inputCls =
+    "w-full h-[42px] px-[14px] text-sm font-body text-ink-primary placeholder:text-ink-tertiary bg-white border border-border-default rounded-[10px] focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-colors"
+
+  return (
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-[20px] shadow-2xl w-full max-w-[560px] max-h-[90vh] flex flex-col">
+
+        {/* Generating overlay */}
+        {generating && (
+          <div className="absolute inset-0 bg-white/90 rounded-[20px] z-10 flex flex-col items-center justify-center gap-4">
+            <div className="w-14 h-14 rounded-full bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center">
+              <Loader2 className="w-7 h-7 text-white animate-spin" />
+            </div>
+            <div className="text-center">
+              <p className="font-display font-semibold text-lg text-ink-primary">Generating Re-Assessment</p>
+              <p className="font-body text-sm text-ink-secondary mt-1">{GEN_MESSAGES[msgIdx]}</p>
+            </div>
+          </div>
+        )}
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border-light shrink-0">
+          <div className="flex items-center gap-2">
+            <Zap className="w-5 h-5 text-primary-500" strokeWidth={1.75} />
+            <h2 className="font-display font-semibold text-lg text-ink-primary">Generate Re-Assessment</h2>
+          </div>
+          <button onClick={onClose} className="text-ink-tertiary hover:text-ink-primary transition-colors">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="overflow-y-auto flex-1 px-6 py-5 space-y-5">
+
+          {/* Class readiness summary */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="bg-[#E8F5E9] rounded-[10px] p-3">
+              <p className="font-body text-[11px] text-[#2D8A4E] uppercase tracking-wide mb-0.5">Ready for Next Unit</p>
+              <p className="font-display font-bold text-xl text-[#2D8A4E]">{readyPct}%</p>
+            </div>
+            <div className="bg-[#FFEBEE] rounded-[10px] p-3">
+              <p className="font-body text-[11px] text-danger-500 uppercase tracking-wide mb-0.5">Need Intervention</p>
+              <p className="font-display font-bold text-xl text-danger-500">{interventionPct}%</p>
+            </div>
+          </div>
+
+          {/* Subtopics */}
+          <div>
+            <p className="font-display font-semibold text-sm text-ink-primary mb-2">
+              Target Subtopics <span className="font-body font-normal text-ink-tertiary text-[12px]">({selected.size} selected)</span>
+            </p>
+            <div className="space-y-2 max-h-[200px] overflow-y-auto pr-1">
+              {allSubtopics.map(([subtopic, data]) => {
+                const c = MASTERY_COLORS[data.level as MasteryLevel]
+                const isSelected = selected.has(subtopic)
+                return (
+                  <label
+                    key={subtopic}
+                    className={cn(
+                      "flex items-center gap-3 p-3 rounded-[10px] border cursor-pointer transition-all",
+                      isSelected
+                        ? "border-primary-500 bg-primary-50"
+                        : "border-border-light bg-surface-secondary hover:border-primary-300"
+                    )}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => toggle(subtopic)}
+                      className="w-4 h-4 rounded accent-primary-500"
+                    />
+                    <span className="font-body text-sm text-ink-primary flex-1 truncate">{subtopic}</span>
+                    <span className="font-display font-semibold text-[13px]" style={{ color: c.text }}>
+                      {data.pct}%
+                    </span>
+                    <span
+                      className="px-2 py-0.5 rounded-full text-[10px] font-semibold capitalize"
+                      style={{ backgroundColor: c.bg, color: c.text }}
+                    >
+                      {data.level}
+                    </span>
+                  </label>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Config */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <label className="text-[13px] font-medium text-ink-secondary font-body">Question Count</label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min={3}
+                  max={30}
+                  value={questionCount}
+                  onChange={(e) => setQuestionCount(Math.max(3, Math.min(30, Number(e.target.value))))}
+                  className={cn(inputCls, "text-center")}
+                />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-[13px] font-medium text-ink-secondary font-body">Difficulty</label>
+              <select
+                value={difficulty}
+                onChange={(e) => setDifficulty(e.target.value as DifficultyLevel)}
+                className={cn(inputCls, "cursor-pointer")}
+              >
+                <option value="easy">Easy</option>
+                <option value="medium">Medium</option>
+                <option value="hard">Hard</option>
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-[13px] font-medium text-ink-secondary font-body">Subject</label>
+              <input
+                value={subject}
+                onChange={(e) => setSubject(e.target.value)}
+                placeholder="e.g. Science"
+                className={inputCls}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-[13px] font-medium text-ink-secondary font-body">Grade Level</label>
+              <input
+                value={gradeLevel}
+                onChange={(e) => setGradeLevel(e.target.value)}
+                placeholder="e.g. 9"
+                className={inputCls}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-border-light shrink-0">
+          <Button variant="secondary" onClick={onClose} disabled={generating}>Cancel</Button>
+          <Button
+            variant="gradient"
+            onClick={handleGenerate}
+            disabled={generating || selected.size === 0}
+          >
+            {generating ? <><Loader2 className="w-4 h-4 animate-spin" /> Generating…</> : <><Zap className="w-4 h-4" /> Generate</>}
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Page ───────────────────────────────────────────────────────
 
 export default function AssessmentDiagnosticPage() {
@@ -336,6 +566,7 @@ export default function AssessmentDiagnosticPage() {
   const [report, setReport] = useState<DiagnosticReport | null | undefined>(undefined)
   const [loading, setLoading] = useState(true)
   const [generating, setGenerating] = useState(false)
+  const [showReassessModal, setShowReassessModal] = useState(false)
 
   useEffect(() => {
     Promise.all([api.getAssessment(id), api.getDiagnostics(id)])
@@ -517,7 +748,8 @@ export default function AssessmentDiagnosticPage() {
 
           {/* Action row */}
           <div className="flex items-center gap-3 pb-4">
-            <Button variant="gradient" size="lg" onClick={() => toast.info("Re-assessment coming in Phase 5")}>
+            <Button variant="gradient" size="lg" onClick={() => setShowReassessModal(true)}>
+              <Zap className="w-4 h-4" />
               Generate Re-Assessment
             </Button>
             <Button variant="secondary" size="lg" onClick={() => toast.info("Export coming soon")}>
@@ -526,6 +758,19 @@ export default function AssessmentDiagnosticPage() {
             </Button>
           </div>
         </>
+      )}
+
+      {/* Re-Assessment Modal */}
+      {showReassessModal && report && (
+        <ReassessmentModal
+          report={report}
+          assessmentId={id}
+          onClose={() => setShowReassessModal(false)}
+          onSuccess={(newId) => {
+            setShowReassessModal(false)
+            router.push(`/dashboard/exams/create?id=${newId}`)
+          }}
+        />
       )}
     </div>
   )
