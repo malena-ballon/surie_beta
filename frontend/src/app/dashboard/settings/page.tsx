@@ -23,7 +23,10 @@ function PhotoCropper({
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const imgRef = useRef<HTMLImageElement | null>(null)
-  const [zoom, setZoom] = useState(1)
+  // fitScale = the scale that makes the image fill the canvas at 1×
+  const fitScaleRef = useRef(1)
+  // zoomMultiplier: 1 = original fit, 2 = 2× zoom, etc.
+  const [zoomMultiplier, setZoomMultiplier] = useState(1)
   const [offset, setOffset] = useState({ x: 0, y: 0 })
   const dragging = useRef(false)
   const lastPos = useRef({ x: 0, y: 0 })
@@ -37,17 +40,16 @@ function PhotoCropper({
     const ctx = canvas.getContext("2d")
     if (!ctx) return
 
-    ctx.clearRect(0, 0, CANVAS_SIZE, CANVAS_SIZE)
-
-    // Draw image centered with zoom and offset
-    const scale = zoom
+    const scale = fitScaleRef.current * zoomMultiplier
     const w = img.naturalWidth * scale
     const h = img.naturalHeight * scale
     const baseX = (CANVAS_SIZE - w) / 2
     const baseY = (CANVAS_SIZE - h) / 2
+
+    ctx.clearRect(0, 0, CANVAS_SIZE, CANVAS_SIZE)
     ctx.drawImage(img, baseX + offset.x, baseY + offset.y, w, h)
 
-    // Circular clip overlay
+    // Dark overlay with circular cutout
     ctx.save()
     ctx.fillStyle = "rgba(0,0,0,0.4)"
     ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_SIZE)
@@ -63,15 +65,18 @@ function PhotoCropper({
     ctx.strokeStyle = "white"
     ctx.lineWidth = 2
     ctx.stroke()
-  }, [zoom, offset])
+  }, [zoomMultiplier, offset])
 
   useEffect(() => {
     const img = new window.Image()
     img.onload = () => {
       imgRef.current = img
-      // Fit image to canvas by default
-      const fitScale = Math.max(CANVAS_SIZE / img.naturalWidth, CANVAS_SIZE / img.naturalHeight)
-      setZoom(fitScale)
+      // fitScale makes the image fill the canvas — this is our "1×" baseline
+      fitScaleRef.current = Math.max(
+        CANVAS_SIZE / img.naturalWidth,
+        CANVAS_SIZE / img.naturalHeight
+      )
+      setZoomMultiplier(1)
       setOffset({ x: 0, y: 0 })
     }
     img.src = src
@@ -107,11 +112,9 @@ function PhotoCropper({
   const onTouchEnd = () => { dragging.current = false }
 
   const handleCrop = () => {
-    const canvas = canvasRef.current
     const img = imgRef.current
-    if (!canvas || !img) return
+    if (!img) return
 
-    // Draw final cropped circle to a clean canvas
     const out = document.createElement("canvas")
     out.width = CANVAS_SIZE
     out.height = CANVAS_SIZE
@@ -121,7 +124,7 @@ function PhotoCropper({
     ctx.arc(CANVAS_SIZE / 2, CANVAS_SIZE / 2, CANVAS_SIZE / 2, 0, Math.PI * 2)
     ctx.clip()
 
-    const scale = zoom
+    const scale = fitScaleRef.current * zoomMultiplier
     const w = img.naturalWidth * scale
     const h = img.naturalHeight * scale
     const baseX = (CANVAS_SIZE - w) / 2
@@ -159,11 +162,11 @@ function PhotoCropper({
           <ZoomOut className="w-4 h-4 text-ink-tertiary shrink-0" />
           <input
             type="range"
-            min={0.5}
+            min={1}
             max={4}
             step={0.01}
-            value={zoom}
-            onChange={(e) => setZoom(parseFloat(e.target.value))}
+            value={zoomMultiplier}
+            onChange={(e) => setZoomMultiplier(parseFloat(e.target.value))}
             className="flex-1 accent-primary-500"
           />
           <ZoomIn className="w-4 h-4 text-ink-tertiary shrink-0" />
