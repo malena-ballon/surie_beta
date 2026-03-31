@@ -100,6 +100,7 @@ export type AssessmentStatus =
   | "completed"
   | "graded"
   | "closed"
+  | "archived"
 
 interface StatusBadgeProps {
   status: AssessmentStatus
@@ -133,6 +134,11 @@ const statusConfig: Record<
   },
   closed: {
     label: "Closed",
+    bg:    "bg-[#EAEAEA]",
+    text:  "text-[#888]",
+  },
+  archived: {
+    label: "Archived",
     bg:    "bg-[#EAEAEA]",
     text:  "text-[#888]",
   },
