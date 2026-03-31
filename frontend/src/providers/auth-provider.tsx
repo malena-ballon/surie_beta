@@ -9,6 +9,7 @@ interface AuthContextValue {
   isLoading: boolean
   login: (email: string, password: string) => Promise<AuthUser>
   logout: () => void
+  updateUser: (patch: Partial<AuthUser>) => void
 }
 
 const AuthContext = createContext<AuthContextValue>({
@@ -17,6 +18,7 @@ const AuthContext = createContext<AuthContextValue>({
   isLoading: true,
   login: async () => { throw new Error("not ready") },
   logout: () => {},
+  updateUser: () => {},
 })
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -46,9 +48,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     authLogout()
   }
 
+  const updateUser = (patch: Partial<AuthUser>) => {
+    setUser((prev) => prev ? { ...prev, ...patch } : prev)
+  }
+
   return (
     <AuthContext.Provider
-      value={{ user, isAuthenticated: !!user, isLoading, login, logout }}
+      value={{ user, isAuthenticated: !!user, isLoading, login, logout, updateUser }}
     >
       {children}
     </AuthContext.Provider>

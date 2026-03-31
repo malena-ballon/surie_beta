@@ -6,6 +6,8 @@ import {
   ArrowLeft,
   ArrowUp,
   ArrowDown,
+  ChevronDown,
+  ChevronUp,
   Minus,
   BarChart2,
   Brain,
@@ -33,6 +35,7 @@ import {
   type AssessmentDetail,
   type DiagnosticReport,
   type MasteryLevel,
+  type QuestionItem,
   type StudentSummary,
   type DifficultyLevel,
 } from "@/lib/api"
@@ -186,7 +189,66 @@ function SubtopicHeatmap({ data }: { data: Record<string, { pct: number; level: 
 
 // ── Topics to reteach ──────────────────────────────────────────
 
-function ReteachPanel({ topics }: { data?: unknown; topics: DiagnosticReport["topics_to_reteach"] }) {
+function ReteachItem({
+  topic,
+  questions,
+}: {
+  topic: DiagnosticReport["topics_to_reteach"][number]
+  questions: QuestionItem[]
+}) {
+  const [open, setOpen] = useState(false)
+  const c = MASTERY_COLORS[topic.level]
+  // Questions tagged with this topic
+  const tagged = questions.filter((q) =>
+    q.subtopic_tags?.some((tag) => tag.toLowerCase() === topic.subtopic.toLowerCase())
+  )
+
+  return (
+    <div
+      className="rounded-[10px] border-l-4 p-3 pl-4"
+      style={{ borderColor: c.border, backgroundColor: c.bg + "66" }}
+    >
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <span className="font-display font-semibold text-[13px] text-ink-primary">
+          {topic.subtopic}
+        </span>
+        <span className="font-display font-bold text-sm" style={{ color: c.text }}>
+          {topic.avg_pct}%
+        </span>
+      </div>
+      <p className="font-body text-[12px] text-ink-secondary mt-1.5 leading-relaxed">
+        {topic.misconception}
+      </p>
+      {tagged.length > 0 && (
+        <button
+          onClick={() => setOpen((o) => !o)}
+          className="flex items-center gap-1 mt-2 text-[11px] font-medium font-body text-ink-tertiary hover:text-ink-primary transition-colors"
+        >
+          {open ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+          {tagged.length} related question{tagged.length !== 1 ? "s" : ""}
+        </button>
+      )}
+      {open && tagged.length > 0 && (
+        <div className="mt-2 space-y-1.5">
+          {tagged.map((q, i) => (
+            <div key={q.id} className="text-[11px] font-body text-ink-secondary bg-white/60 rounded-[6px] px-2.5 py-1.5 leading-snug">
+              <span className="font-semibold text-ink-tertiary mr-1">Q{i + 1}.</span>
+              {q.question_text}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ReteachPanel({
+  topics,
+  questions,
+}: {
+  topics: DiagnosticReport["topics_to_reteach"]
+  questions: QuestionItem[]
+}) {
   if (topics.length === 0) {
     return (
       <div className="bg-white rounded-[14px] border border-border-light shadow-card p-5">
@@ -203,28 +265,9 @@ function ReteachPanel({ topics }: { data?: unknown; topics: DiagnosticReport["to
     <div className="bg-white rounded-[14px] border border-border-light shadow-card p-5">
       <h3 className="font-display font-semibold text-base text-ink-primary mb-4">Topics to Reteach</h3>
       <div className="space-y-3">
-        {topics.map((t) => {
-          const c = MASTERY_COLORS[t.level]
-          return (
-            <div
-              key={t.subtopic}
-              className="rounded-[10px] border-l-4 p-3 pl-4"
-              style={{ borderColor: c.border, backgroundColor: c.bg + "66" }}
-            >
-              <div className="flex items-center justify-between flex-wrap gap-2">
-                <span className="font-display font-semibold text-[13px] text-ink-primary">
-                  {t.subtopic}
-                </span>
-                <span className="font-display font-bold text-sm" style={{ color: c.text }}>
-                  {t.avg_pct}%
-                </span>
-              </div>
-              <p className="font-body text-[12px] text-ink-secondary mt-1.5 leading-relaxed">
-                {t.misconception}
-              </p>
-            </div>
-          )
-        })}
+        {topics.map((t) => (
+          <ReteachItem key={t.subtopic} topic={t} questions={questions} />
+        ))}
       </div>
     </div>
   )
@@ -719,7 +762,7 @@ export default function AssessmentDiagnosticPage() {
 
           {/* Reteach + Student table */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-            <ReteachPanel topics={report.topics_to_reteach} />
+            <ReteachPanel topics={report.topics_to_reteach} questions={assessment.questions} />
             <StudentTable students={report.student_summaries} />
           </div>
 

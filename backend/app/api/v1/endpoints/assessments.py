@@ -209,6 +209,21 @@ async def publish_assessment(
     return _to_item(assessment, await _question_count(assessment.id, db))
 
 
+# ── Delete assessment ─────────────────────────────────────────
+
+
+@router.delete("/{assessment_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_assessment(
+    assessment_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    assessment = await _get_assessment_or_403(assessment_id, db, current_user)
+    await db.delete(assessment)
+    await db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 # ── Add question ──────────────────────────────────────────────
 
 

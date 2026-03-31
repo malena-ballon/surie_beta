@@ -39,6 +39,12 @@ class TokenResponse(BaseModel):
     token_type: str = "bearer"
 
 
+class UpdateMeRequest(BaseModel):
+    first_name: str | None = None
+    last_name: str | None = None
+    avatar_url: str | None = None
+
+
 class UserResponse(BaseModel):
     model_config = {"from_attributes": True}
 
@@ -49,4 +55,5 @@ class UserResponse(BaseModel):
     role: UserRole
     institution_id: uuid.UUID
     is_active: bool
+    avatar_url: str | None = None
     created_at: datetime

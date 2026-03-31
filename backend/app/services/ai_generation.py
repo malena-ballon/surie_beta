@@ -37,6 +37,7 @@ Rules:
 - Apply the specified difficulty level consistently
 - Make questions grade-level appropriate for Grade {grade_level}
 - Base ALL questions strictly on the provided source material
+- subtopic_tags must use BROAD topic names (e.g. "Cell Division", "Newton's Laws") — never narrow sub-steps or specific phases
 - For mcq: always provide exactly 4 choices labeled A, B, C, D; one must be correct
 - For true_false: correct_answer must be exactly "True" or "False"
 - For identification: correct_answer is the exact term or short phrase
@@ -56,7 +57,7 @@ Each question object must have this exact shape:
   "choices": [{{"label": "A", "text": "...", "is_correct": false}}, ...],
   "correct_answer": "Correct answer text or MCQ label (A/B/C/D)",
   "explanation": "Why this answer is correct and why the others are not",
-  "subtopic_tags": ["subtopic1", "subtopic2"],
+  "subtopic_tags": ["Major Topic Area (e.g. Cell Division, not Prophase stages)"],
   "blooms_level": "remembering" | "understanding" | "applying" | "analyzing" | "evaluating" | "creating",
   "difficulty": "easy" | "medium" | "hard"
 }}

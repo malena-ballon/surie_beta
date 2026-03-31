@@ -248,8 +248,12 @@ export function Sidebar() {
   const { collapsed, toggle, mobileOpen, closeMobile } = useSidebar()
   const pathname = usePathname()
 
-  const isActive = (href: string) =>
-    href === "/dashboard" ? pathname === href : pathname.startsWith(href)
+  const isActive = (href: string) => {
+    if (href === "/dashboard") return pathname === href
+    // Exam Library should not light up when on the create page
+    if (href === "/dashboard/exams") return pathname === href
+    return pathname.startsWith(href)
+  }
 
   return (
     <TooltipProvider delayDuration={0}>

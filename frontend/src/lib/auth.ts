@@ -9,6 +9,7 @@ export interface AuthUser {
   role: string
   institution_id: string
   is_active: boolean
+  avatar_url: string | null
   created_at: string
 }
 

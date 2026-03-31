@@ -8,7 +8,14 @@ from app.core.security import create_access_token, get_password_hash, verify_pas
 from app.models import Institution, User, UserRole
 from app.models.classroom import Classroom
 from app.models.enrollment import Enrollment
-from app.schemas.auth import LoginRequest, RegisterRequest, StudentRegisterRequest, TokenResponse, UserResponse
+from app.schemas.auth import (
+    LoginRequest,
+    RegisterRequest,
+    StudentRegisterRequest,
+    TokenResponse,
+    UpdateMeRequest,
+    UserResponse,
+)
 
 router = APIRouter()
 
@@ -48,7 +55,6 @@ async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)) ->
 
 @router.post("/register/student", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
 async def register_student(body: StudentRegisterRequest, db: AsyncSession = Depends(get_db)) -> TokenResponse:
-    # Validate join code
     cls_result = await db.execute(
         select(Classroom).where(Classroom.join_code == body.join_code.upper().strip())
     )
@@ -56,7 +62,6 @@ async def register_student(body: StudentRegisterRequest, db: AsyncSession = Depe
     if not classroom:
         raise HTTPException(status_code=404, detail="Invalid join code")
 
-    # Check email not already taken
     existing = await db.scalar(select(User).where(User.email == body.email))
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
@@ -107,4 +112,21 @@ async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)) -> Token
 
 @router.get("/me", response_model=UserResponse)
 async def me(current_user: User = Depends(get_current_user)) -> User:
+    return current_user
+
+
+@router.put("/me", response_model=UserResponse)
+async def update_me(
+    body: UpdateMeRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> User:
+    if body.first_name is not None:
+        current_user.first_name = body.first_name.strip()
+    if body.last_name is not None:
+        current_user.last_name = body.last_name.strip()
+    if body.avatar_url is not None:
+        current_user.avatar_url = body.avatar_url or None
+    await db.commit()
+    await db.refresh(current_user)
     return current_user

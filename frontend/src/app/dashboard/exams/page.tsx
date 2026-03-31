@@ -9,6 +9,7 @@ import {
   FileText,
   BarChart2,
   Archive,
+  Trash2,
 } from "lucide-react"
 import { toast } from "sonner"
 import { api, type AssessmentItem, type AssessmentStatus, type ClassItem } from "@/lib/api"
@@ -56,10 +57,11 @@ function AssessmentCard({
 }: {
   item: AssessmentItem
   className: ClassItem | undefined
-  onAction: (type: "edit" | "results" | "archive") => void
+  onAction: (type: "edit" | "results" | "archive" | "delete") => void
 }) {
   const isDraft = item.status === "draft"
   const canViewResults = item.status === "published" || item.status === "closed"
+  const [confirmDelete, setConfirmDelete] = useState(false)
 
   return (
     <div className="bg-white rounded-[14px] border border-border-light shadow-card p-5 flex flex-col gap-3 hover:shadow-card-hover transition-shadow duration-[250ms]">
@@ -109,13 +111,33 @@ function AssessmentCard({
             View Results
           </button>
         )}
-        <button
-          onClick={() => onAction("archive")}
-          className="flex items-center gap-1.5 text-[12px] font-medium font-body text-ink-tertiary hover:text-ink-secondary transition-colors ml-auto"
-        >
-          <Archive className="w-3.5 h-3.5" />
-          Archive
-        </button>
+        <div className="flex items-center gap-3 ml-auto">
+          {confirmDelete ? (
+            <>
+              <span className="text-[12px] font-body text-ink-secondary">Delete?</span>
+              <button
+                onClick={() => { onAction("delete"); setConfirmDelete(false) }}
+                className="text-[12px] font-medium font-body text-danger-500 hover:text-danger-600 transition-colors"
+              >
+                Yes
+              </button>
+              <button
+                onClick={() => setConfirmDelete(false)}
+                className="text-[12px] font-medium font-body text-ink-tertiary hover:text-ink-primary transition-colors"
+              >
+                No
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={() => setConfirmDelete(true)}
+              className="flex items-center gap-1.5 text-[12px] font-medium font-body text-ink-tertiary hover:text-danger-500 transition-colors"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              Delete
+            </button>
+          )}
+        </div>
       </div>
     </div>
   )
@@ -168,11 +190,19 @@ export default function ExamsPage() {
 
   const classMap = Object.fromEntries(classes.map((c) => [c.id, c]))
 
-  const handleAction = (item: AssessmentItem, type: "edit" | "results" | "archive") => {
+  const handleAction = async (item: AssessmentItem, type: "edit" | "results" | "archive" | "delete") => {
     if (type === "edit") {
       router.push(`/dashboard/exams/create?id=${item.id}`)
     } else if (type === "results") {
       router.push(`/dashboard/assessments/${item.id}`)
+    } else if (type === "delete") {
+      try {
+        await api.deleteAssessment(item.id)
+        setAssessments((prev) => prev.filter((a) => a.id !== item.id))
+        toast.success("Exam deleted")
+      } catch {
+        toast.error("Failed to delete exam")
+      }
     } else {
       toast.info("Archive coming soon")
     }

@@ -247,6 +247,41 @@ export interface StudentAssessmentItem {
   max_score: number | null
 }
 
+export interface UserProfile {
+  id: string
+  email: string
+  first_name: string
+  last_name: string
+  role: string
+  institution_id: string
+  is_active: boolean
+  avatar_url: string | null
+  created_at: string
+}
+
+export interface DashboardRecentAssessment {
+  id: string
+  title: string
+  class_name: string
+  subject: string
+  grade_level: string
+  status: AssessmentStatus
+  difficulty: DifficultyLevel
+  question_count: number
+  created_at: string
+  avg_score: number | null
+  mastery_rate: number | null
+}
+
+export interface DashboardData {
+  total_students: number
+  total_classes: number
+  total_exams: number
+  pending_review: number
+  avg_mastery_rate: number | null
+  recent_assessments: DashboardRecentAssessment[]
+}
+
 // ── API functions ──────────────────────────────────────────────
 
 export const api = {
@@ -384,5 +419,23 @@ export const api = {
   },
   uploadMaterial(file: File) {
     return uploadFile<MaterialItem>("/api/v1/materials", file)
+  },
+
+  // Assessment delete
+  deleteAssessment(id: string) {
+    return req<void>(`/api/v1/assessments/${id}`, { method: "DELETE" })
+  },
+
+  // Dashboard
+  getDashboard() {
+    return req<DashboardData>("/api/v1/dashboard")
+  },
+
+  // Profile
+  updateMe(data: { first_name?: string; last_name?: string; avatar_url?: string | null }) {
+    return req<UserProfile>("/api/v1/auth/me", { method: "PUT", body: JSON.stringify(data) })
+  },
+  getMe() {
+    return req<UserProfile>("/api/v1/auth/me")
   },
 }
