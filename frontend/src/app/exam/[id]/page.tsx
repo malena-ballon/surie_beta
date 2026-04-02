@@ -383,7 +383,7 @@ export default function ExamPage() {
   const [showIntro, setShowIntro] = useState(true)
   const [submission, setSubmission] = useState<Submission | null>(null)
   const [answers, setAnswers] = useState<Record<string, string>>({})
-  const [current, setCurrent] = useState(0)
+  const [current, setCurrent] = useState(-1) // -1 = cover slide
   const [loading, setLoading] = useState(true)
   const [starting, setStarting] = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -406,23 +406,32 @@ export default function ExamPage() {
       })
   }, [assessmentId, existingSubId])
 
-  // If resuming an existing submission, skip intro and load it immediately
+  // If resuming or reviewing an existing submission
   useEffect(() => {
     if (!existingSubId) return
-    const resume = async () => {
+    const load = async () => {
       try {
+        // Check submission status first
+        const subResult = await req<SubmissionResult>(`/api/v1/submissions/${existingSubId}`)
+        if (subResult.status !== "in_progress") {
+          // Already submitted/graded — show result screen
+          setResult(subResult)
+          setLoading(false)
+          return
+        }
+        // Still in progress — resume the exam
         const sub = await req<Submission>(`/api/v1/submissions/${existingSubId}/resume`)
         setSubmission(sub)
         setShowIntro(false)
       } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : "Failed to resume exam"
+        const msg = e instanceof Error ? e.message : "Failed to load exam"
         toast.error(msg)
         router.back()
       } finally {
         setLoading(false)
       }
     }
-    resume()
+    load()
   }, [existingSubId, router])
 
   const handleStart = async () => {
@@ -527,7 +536,7 @@ export default function ExamPage() {
   if (!submission) return null
 
   const questions = submission.questions
-  const q = questions[current]
+  const q = current >= 0 ? questions[current] : null
   const unanswered = questions.filter((q) => !answers[q.id]).length
   const isNearEnd = secs !== null && secs < 300
 
@@ -571,8 +580,21 @@ export default function ExamPage() {
         </div>
 
         {/* Question nav strip */}
-        <div className="fixed top-16 left-0 right-0 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.06)] z-30 px-6 py-3">
-          <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+        <div className="fixed top-14 md:top-16 left-0 right-0 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.06)] z-30 px-4 md:px-6 py-2">
+          <div className="flex gap-2 overflow-x-auto py-1 scrollbar-hide">
+            {/* Cover slide tab */}
+            <button
+              onClick={() => setCurrent(-1)}
+              title="Exam Info"
+              className={cn(
+                "w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold font-body shrink-0 transition-all",
+                current === -1
+                  ? "ring-2 ring-primary-300 bg-primary-500 text-white shadow-sm"
+                  : "border border-border-default text-ink-secondary bg-white hover:border-primary-300"
+              )}
+            >
+              i
+            </button>
             {questions.map((question, i) => {
               const answered = !!answers[question.id]
               const isCurrent = i === current
@@ -583,7 +605,7 @@ export default function ExamPage() {
                   className={cn(
                     "w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold font-body shrink-0 transition-all",
                     isCurrent
-                      ? "scale-110 ring-2 ring-primary-300 bg-primary-500 text-white"
+                      ? "ring-2 ring-primary-300 bg-primary-500 text-white shadow-sm"
                       : answered
                       ? "bg-primary-500 text-white"
                       : "border border-border-default text-ink-secondary bg-white hover:border-primary-300"
@@ -597,80 +619,124 @@ export default function ExamPage() {
         </div>
 
         {/* Main */}
-        <div className="flex-1 pt-[100px] md:pt-[112px] pb-24 px-4">
+        <div className="flex-1 pt-[96px] md:pt-[108px] pb-24 px-4">
           <div className="max-w-[720px] mx-auto py-6">
-            <div className="bg-white rounded-2xl shadow-card p-8">
-              {/* Overline */}
-              <p className="text-[11px] font-semibold font-body uppercase tracking-widest text-ink-tertiary mb-3">
-                Question {current + 1} of {questions.length} &bull;{" "}
-                {q.question_type === "mcq"
-                  ? "Multiple Choice"
-                  : q.question_type === "true_false"
-                  ? "True or False"
-                  : q.question_type === "identification"
-                  ? "Identification"
-                  : "Essay"}
-              </p>
-
-              {/* Question text */}
-              <p className="font-body text-[18px] text-ink-primary leading-relaxed mb-8">
-                {q.question_text}
-              </p>
-
-              {/* Answer area */}
-              {q.question_type === "mcq" && q.choices && (
-                <div className="flex flex-col gap-3">
-                  {q.choices.map((choice) => (
-                    <MCQChoice
-                      key={choice.label}
-                      choice={choice}
-                      selected={answers[q.id] === choice.label}
-                      onSelect={() => handleAnswer(q.id, choice.label)}
-                    />
-                  ))}
+            {current === -1 ? (
+              /* Cover slide */
+              <div className="bg-white rounded-2xl shadow-card p-8">
+                <p className="text-[11px] font-semibold font-body uppercase tracking-widest text-ink-tertiary mb-3">
+                  Exam Information
+                </p>
+                <h2 className="font-display font-bold text-2xl text-ink-primary leading-tight mb-4">
+                  {meta?.title}
+                </h2>
+                {meta?.description ? (
+                  <p className="font-body text-[15px] text-ink-secondary leading-relaxed border-l-4 border-primary-200 pl-4 mb-6">
+                    {meta.description}
+                  </p>
+                ) : (
+                  <p className="font-body text-sm text-ink-tertiary mb-6">No description provided.</p>
+                )}
+                <div className="flex flex-wrap gap-4 mb-8">
+                  <div className="text-sm font-body text-ink-secondary">
+                    <span className="text-ink-tertiary">Questions: </span>
+                    <span className="font-semibold text-ink-primary">{questions.length}</span>
+                  </div>
+                  {meta?.time_limit_minutes && (
+                    <div className="flex items-center gap-1.5 text-sm font-body text-ink-secondary">
+                      <Clock className="w-4 h-4 text-primary-500 shrink-0" />
+                      <span className="text-ink-tertiary">Time limit: </span>
+                      <span className="font-semibold text-ink-primary">
+                        {(() => {
+                          const h = Math.floor(meta.time_limit_minutes / 60)
+                          const m = meta.time_limit_minutes % 60
+                          if (h > 0 && m > 0) return `${h}h ${m}min`
+                          if (h > 0) return `${h}h`
+                          return `${m}min`
+                        })()}
+                      </span>
+                    </div>
+                  )}
                 </div>
-              )}
+                <button
+                  onClick={() => setCurrent(0)}
+                  className="w-full py-3 rounded-xl bg-gradient-to-r from-primary-500 to-accent-500 text-white font-semibold font-body text-sm hover:opacity-90 transition-opacity"
+                >
+                  Go to Question 1 →
+                </button>
+              </div>
+            ) : q ? (
+              /* Question */
+              <div className="bg-white rounded-2xl shadow-card p-8">
+                <p className="text-[11px] font-semibold font-body uppercase tracking-widest text-ink-tertiary mb-3">
+                  Question {current + 1} of {questions.length} &bull;{" "}
+                  {q.question_type === "mcq"
+                    ? "Multiple Choice"
+                    : q.question_type === "true_false"
+                    ? "True or False"
+                    : q.question_type === "identification"
+                    ? "Identification"
+                    : "Essay"}
+                </p>
 
-              {q.question_type === "true_false" && (
-                <TrueFalseAnswer
-                  value={answers[q.id] ?? ""}
-                  onChange={(v) => handleAnswer(q.id, v)}
-                />
-              )}
+                <p className="font-body text-[18px] text-ink-primary leading-relaxed mb-8">
+                  {q.question_text}
+                </p>
 
-              {q.question_type === "identification" && (
-                <input
-                  type="text"
-                  value={answers[q.id] ?? ""}
-                  onChange={(e) => handleAnswer(q.id, e.target.value)}
-                  placeholder="Type your answer here\u2026"
-                  className="w-full h-[48px] px-4 text-sm font-body text-ink-primary placeholder:text-ink-tertiary bg-white border border-border-default rounded-xl focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-colors"
-                />
-              )}
+                {q.question_type === "mcq" && q.choices && (
+                  <div className="flex flex-col gap-3">
+                    {q.choices.map((choice) => (
+                      <MCQChoice
+                        key={choice.label}
+                        choice={choice}
+                        selected={answers[q.id] === choice.label}
+                        onSelect={() => handleAnswer(q.id, choice.label)}
+                      />
+                    ))}
+                  </div>
+                )}
 
-              {q.question_type === "essay" && (
-                <div className="relative">
-                  <textarea
+                {q.question_type === "true_false" && (
+                  <TrueFalseAnswer
+                    value={answers[q.id] ?? ""}
+                    onChange={(v) => handleAnswer(q.id, v)}
+                  />
+                )}
+
+                {q.question_type === "identification" && (
+                  <input
+                    type="text"
                     value={answers[q.id] ?? ""}
                     onChange={(e) => handleAnswer(q.id, e.target.value)}
-                    placeholder="Write your answer here\u2026"
-                    rows={6}
-                    className="w-full px-4 py-3 text-sm font-body text-ink-primary placeholder:text-ink-tertiary bg-white border border-border-default rounded-xl focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-colors resize-none"
+                    placeholder="Type your answer here…"
+                    className="w-full h-[48px] px-4 text-sm font-body text-ink-primary placeholder:text-ink-tertiary bg-white border border-border-default rounded-xl focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-colors"
                   />
-                  <span className="absolute bottom-3 right-4 text-[11px] text-ink-tertiary font-body">
-                    {(answers[q.id] ?? "").split(/\s+/).filter(Boolean).length} words
-                  </span>
-                </div>
-              )}
-            </div>
+                )}
+
+                {q.question_type === "essay" && (
+                  <div className="relative">
+                    <textarea
+                      value={answers[q.id] ?? ""}
+                      onChange={(e) => handleAnswer(q.id, e.target.value)}
+                      placeholder="Write your answer here…"
+                      rows={6}
+                      className="w-full px-4 py-3 text-sm font-body text-ink-primary placeholder:text-ink-tertiary bg-white border border-border-default rounded-xl focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-colors resize-none"
+                    />
+                    <span className="absolute bottom-3 right-4 text-[11px] text-ink-tertiary font-body">
+                      {(answers[q.id] ?? "").split(/\s+/).filter(Boolean).length} words
+                    </span>
+                  </div>
+                )}
+              </div>
+            ) : null}
           </div>
         </div>
 
         {/* Bottom nav */}
         <div className="fixed bottom-0 left-0 right-0 h-[72px] bg-white shadow-[0_-2px_8px_rgba(0,0,0,0.06)] z-30 flex items-center justify-between px-6">
           <button
-            onClick={() => setCurrent((c) => Math.max(0, c - 1))}
-            disabled={current === 0}
+            onClick={() => setCurrent((c) => Math.max(-1, c - 1))}
+            disabled={current === -1}
             className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl border border-border-default text-sm font-medium font-body text-ink-secondary hover:bg-surface-secondary transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <ChevronLeft className="w-4 h-4" />

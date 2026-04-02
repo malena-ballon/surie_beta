@@ -95,7 +95,7 @@ function ExamAction({
         </span>
         {item.submission_id && (
           <Link
-            href={`/exam/${item.id}`}
+            href={`/exam/${item.id}?sub=${item.submission_id}`}
             className="text-[13px] font-medium text-primary-500 hover:text-primary-600 transition-colors"
           >
             Review
@@ -196,7 +196,6 @@ export default function StudentDashboardPage() {
   const router = useRouter()
   const [assessments, setAssessments] = useState<StudentAssessmentItem[]>([])
   const [loading, setLoading] = useState(true)
-  const [startingId, setStartingId] = useState<string | null>(null)
 
   const firstName = user?.first_name ?? "Student"
   const today = new Date().toLocaleDateString("en-PH", {
@@ -214,15 +213,8 @@ export default function StudentDashboardPage() {
       .finally(() => setLoading(false))
   }, [])
 
-  const handleStart = async (assessmentId: string) => {
-    setStartingId(assessmentId)
-    try {
-      const sub = await api.startExam(assessmentId)
-      router.push(`/exam/${assessmentId}?sub=${(sub as { id: string }).id}`)
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to start exam")
-      setStartingId(null)
-    }
+  const handleStart = (assessmentId: string) => {
+    router.push(`/exam/${assessmentId}`)
   }
 
   // Partition into active (open / in-progress) and past
@@ -303,7 +295,7 @@ export default function StudentDashboardPage() {
                 key={item.id}
                 item={item}
                 onStart={handleStart}
-                starting={startingId === item.id}
+                starting={false}
               />
             ))
           )}
@@ -322,7 +314,7 @@ export default function StudentDashboardPage() {
                 key={item.id}
                 item={item}
                 onStart={handleStart}
-                starting={startingId === item.id}
+                starting={false}
               />
             ))}
           </div>

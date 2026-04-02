@@ -193,8 +193,8 @@ function Step1({ classes, existing, onDone }: Step1Props) {
     essay: 0,
   })
 
-  // Material state
-  const [materialId, setMaterialId] = useState<string | null>(null)
+  // Material state — pre-populate from existing if editing
+  const [materialId, setMaterialId] = useState<string | null>(existing?.source_material_id ?? null)
   const [materialPreview, setMaterialPreview] = useState<string | null>(null)
   const [materialFilename, setMaterialFilename] = useState<string | null>(null)
   const [prevMaterials, setPrevMaterials] = useState<MaterialItem[]>([])
@@ -204,7 +204,18 @@ function Step1({ classes, existing, onDone }: Step1Props) {
   const dragRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    api.getMaterials().then(setPrevMaterials).catch(() => {})
+    api.getMaterials().then((mats) => {
+      setPrevMaterials(mats)
+      // Pre-populate filename/preview for existing material
+      if (existing?.source_material_id) {
+        const linked = mats.find((m) => m.id === existing.source_material_id)
+        if (linked) {
+          setMaterialFilename(linked.filename)
+          setMaterialPreview(linked.preview)
+        }
+      }
+    }).catch(() => {})
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const handleFile = async (file: File) => {
@@ -1065,10 +1076,17 @@ interface Step3Props {
   classes: ClassItem[]
 }
 
+function toDatetimeLocal(iso: string | null): string {
+  if (!iso) return ""
+  const d = new Date(iso)
+  const pad = (n: number) => String(n).padStart(2, "0")
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
 function Step3({ assessment, questions, classes }: Step3Props) {
   const router = useRouter()
-  const [startAt, setStartAt] = useState("")
-  const [endAt, setEndAt] = useState("")
+  const [startAt, setStartAt] = useState(toDatetimeLocal(assessment.start_at))
+  const [endAt, setEndAt] = useState(toDatetimeLocal(assessment.end_at))
   const [timeLimitHH, setTimeLimitHH] = useState(
     assessment.time_limit_minutes
       ? String(Math.floor(assessment.time_limit_minutes / 60)).padStart(2, "0")
@@ -1091,9 +1109,10 @@ function Step3({ assessment, questions, classes }: Step3Props) {
   const handlePublish = async () => {
     setPublishing(true)
     try {
+      // Convert datetime-local (local time) to UTC ISO string before sending
       await api.publishAssessment(assessment.id, {
-        start_at: startAt || undefined,
-        end_at: endAt || undefined,
+        start_at: startAt ? new Date(startAt).toISOString() : undefined,
+        end_at: endAt ? new Date(endAt).toISOString() : undefined,
         time_limit_minutes: timeLimitMinutes,
       })
       toast.success("Assessment published!")
@@ -1181,37 +1200,39 @@ function Step3({ assessment, questions, classes }: Step3Props) {
         <p className="text-[12px] font-body text-ink-tertiary -mt-2">
           Students must complete the exam within this duration once they start.
         </p>
-        <div className="flex items-center gap-2">
-          <div className="space-y-1.5">
-            <label className="text-[12px] font-medium text-ink-secondary font-body">Hours</label>
-            <input
-              type="number"
-              min={0}
-              max={23}
-              value={timeLimitHH}
-              onChange={(e) => setTimeLimitHH(e.target.value.replace(/\D/, "").slice(0, 2))}
-              placeholder="00"
-              className="w-[72px] h-[42px] px-3 text-center text-sm font-body text-ink-primary bg-white border border-border-default rounded-[10px] focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-colors tabular-nums"
-            />
+        <div className="flex flex-col gap-3">
+          <div className="flex items-end gap-3">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[12px] font-medium text-ink-tertiary font-body">Hours</label>
+              <input
+                type="number"
+                min={0}
+                max={23}
+                value={timeLimitHH}
+                onChange={(e) => setTimeLimitHH(e.target.value.replace(/\D/, "").slice(0, 2))}
+                placeholder="00"
+                className="w-[80px] h-[48px] px-3 text-center text-xl font-display font-bold text-ink-primary bg-white border border-border-default rounded-[10px] focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-colors tabular-nums"
+              />
+            </div>
+            <div className="pb-2 font-display font-bold text-2xl text-ink-tertiary">:</div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[12px] font-medium text-ink-tertiary font-body">Minutes</label>
+              <input
+                type="number"
+                min={0}
+                max={59}
+                value={timeLimitMM}
+                onChange={(e) => setTimeLimitMM(e.target.value.replace(/\D/, "").slice(0, 2))}
+                placeholder="00"
+                className="w-[80px] h-[48px] px-3 text-center text-xl font-display font-bold text-ink-primary bg-white border border-border-default rounded-[10px] focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-colors tabular-nums"
+              />
+            </div>
+            {timeLimitMinutes !== null && timeLimitMinutes > 0 && (
+              <p className="text-sm font-body text-ink-secondary pb-3">
+                = {timeLimitMinutes} min{timeLimitMinutes !== 1 ? "s" : ""}
+              </p>
+            )}
           </div>
-          <span className="font-display font-bold text-xl text-ink-tertiary mt-5">:</span>
-          <div className="space-y-1.5">
-            <label className="text-[12px] font-medium text-ink-secondary font-body">Minutes</label>
-            <input
-              type="number"
-              min={0}
-              max={59}
-              value={timeLimitMM}
-              onChange={(e) => setTimeLimitMM(e.target.value.replace(/\D/, "").slice(0, 2))}
-              placeholder="00"
-              className="w-[72px] h-[42px] px-3 text-center text-sm font-body text-ink-primary bg-white border border-border-default rounded-[10px] focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-colors tabular-nums"
-            />
-          </div>
-          {timeLimitMinutes !== null && timeLimitMinutes > 0 && (
-            <p className="text-[12px] font-body text-ink-tertiary mt-5 ml-2">
-              = {timeLimitMinutes} minute{timeLimitMinutes !== 1 ? "s" : ""}
-            </p>
-          )}
         </div>
       </div>
 
