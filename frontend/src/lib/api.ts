@@ -247,6 +247,42 @@ export interface StudentAssessmentItem {
   max_score: number | null
 }
 
+export interface StudentResponseItem {
+  question_id: string
+  student_answer: string | null
+  is_correct: boolean | null
+  score: number | null
+}
+
+export interface StudentSubmissionResponse {
+  student_id: string
+  student_name: string
+  submission_id: string
+  status: string
+  total_score: number | null
+  max_score: number
+  submitted_at: string | null
+  responses: StudentResponseItem[]
+}
+
+export interface QuestionAnalysis {
+  question_id: string
+  question_text: string
+  question_type: QuestionType
+  choices: Choice[] | null
+  correct_answer: string
+  subtopic_tags: string[] | null
+  total_responses: number
+  correct_count: number
+  correct_pct: number
+  answer_distribution: Record<string, number>
+}
+
+export interface AssessmentResponses {
+  student_responses: StudentSubmissionResponse[]
+  question_analysis: QuestionAnalysis[]
+}
+
 export interface UserProfile {
   id: string
   email: string
@@ -419,6 +455,11 @@ export const api = {
   },
   uploadMaterial(file: File) {
     return uploadFile<MaterialItem>("/api/v1/materials", file)
+  },
+
+  // Assessment responses (per-student + per-question)
+  getAssessmentResponses(id: string) {
+    return req<AssessmentResponses>(`/api/v1/assessments/${id}/responses`)
   },
 
   // Assessment delete

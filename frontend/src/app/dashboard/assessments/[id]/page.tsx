@@ -33,6 +33,7 @@ import { toast } from "sonner"
 import {
   api,
   type AssessmentDetail,
+  type AssessmentResponses,
   type DiagnosticReport,
   type MasteryLevel,
   type QuestionItem,
@@ -41,6 +42,7 @@ import {
 } from "@/lib/api"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
+import { MasteryBadge } from "@/components/ui/mastery-badge"
 import { cn } from "@/lib/utils"
 
 // ── Design tokens ──────────────────────────────────────────────
@@ -599,7 +601,202 @@ function ReassessmentModal({
   )
 }
 
+// ── Student Responses tab ──────────────────────────────────────
+
+function StudentResponsesTab({ responses }: { responses: AssessmentResponses; }) {
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+  const questions = responses.question_analysis
+
+  if (responses.student_responses.length === 0) {
+    return (
+      <div className="bg-white rounded-[14px] border border-border-light shadow-card p-10 flex flex-col items-center gap-3 text-center">
+        <Users className="w-10 h-10 text-ink-tertiary/40" strokeWidth={1.5} />
+        <p className="font-display font-semibold text-ink-primary">No submissions yet</p>
+        <p className="font-body text-sm text-ink-tertiary">Student responses will appear here once they submit the exam.</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-3">
+      {responses.student_responses.map((s) => {
+        const pct = s.max_score > 0 ? Math.round((s.total_score ?? 0) / s.max_score * 100) : 0
+        const level: MasteryLevel = pct >= 90 ? "mastered" : pct >= 75 ? "good" : pct >= 60 ? "average" : pct >= 40 ? "remedial" : "critical"
+        const isOpen = expandedId === s.student_id
+        return (
+          <div key={s.student_id} className="bg-white rounded-[14px] border border-border-light shadow-card overflow-hidden">
+            {/* Row header */}
+            <button
+              onClick={() => setExpandedId(isOpen ? null : s.student_id)}
+              className="w-full flex items-center gap-4 px-5 py-4 hover:bg-surface-secondary/50 transition-colors text-left"
+            >
+              <div className="w-9 h-9 rounded-full bg-brand-gradient flex items-center justify-center shrink-0">
+                <span className="text-[11px] font-bold text-white font-display">
+                  {s.student_name.split(" ").map(n => n[0]).slice(0, 2).join("").toUpperCase()}
+                </span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-display font-semibold text-[14px] text-ink-primary">{s.student_name}</p>
+                <p className="font-body text-[12px] text-ink-tertiary capitalize">{s.status.replace("_", " ")}</p>
+              </div>
+              <div className="flex items-center gap-4 shrink-0">
+                <div className="text-right">
+                  <p className="font-display font-bold text-lg text-ink-primary">{s.total_score ?? "—"}/{s.max_score}</p>
+                  <p className="font-body text-[11px] text-ink-tertiary">{pct}%</p>
+                </div>
+                <MasteryBadge status={level} size="sm" showIcon={false} />
+                {isOpen ? <ChevronUp className="w-4 h-4 text-ink-tertiary" /> : <ChevronDown className="w-4 h-4 text-ink-tertiary" />}
+              </div>
+            </button>
+
+            {/* Expanded responses */}
+            {isOpen && (
+              <div className="border-t border-border-light divide-y divide-border-light">
+                {questions.map((q, qi) => {
+                  const resp = s.responses.find(r => r.question_id === q.question_id)
+                  const answered = resp?.student_answer ?? "(no answer)"
+                  const correct = resp?.is_correct
+                  return (
+                    <div key={q.question_id} className="px-5 py-3 flex flex-col sm:flex-row sm:items-start gap-2">
+                      <span className="font-body text-[11px] text-ink-tertiary shrink-0 mt-0.5 w-8">Q{qi + 1}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-body text-[13px] text-ink-primary leading-snug">{q.question_text}</p>
+                        <div className="flex items-center gap-3 mt-1.5 flex-wrap">
+                          <span className={cn(
+                            "inline-flex items-center gap-1 text-[12px] font-medium font-body px-2 py-0.5 rounded-[6px]",
+                            correct === true ? "bg-green-50 text-green-700" :
+                            correct === false ? "bg-red-50 text-red-700" :
+                            "bg-surface-secondary text-ink-secondary"
+                          )}>
+                            {correct === true ? "✓" : correct === false ? "✗" : "–"} {answered}
+                          </span>
+                          {correct === false && (
+                            <span className="text-[12px] font-body text-ink-tertiary">
+                              Correct: <span className="font-medium text-ink-secondary">{q.correct_answer}</span>
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// ── Question Analysis tab ──────────────────────────────────────
+
+function QuestionAnalysisTab({ responses }: { responses: AssessmentResponses }) {
+  if (responses.question_analysis.length === 0) {
+    return (
+      <div className="bg-white rounded-[14px] border border-border-light shadow-card p-10 text-center">
+        <p className="font-body text-sm text-ink-tertiary">No responses to analyze yet.</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      {responses.question_analysis.map((q, qi) => {
+        const total = q.total_responses
+        const pct = q.correct_pct
+
+        // Sort answers by count descending
+        const distEntries = Object.entries(q.answer_distribution).sort((a, b) => b[1] - a[1])
+
+        return (
+          <div key={q.question_id} className="bg-white rounded-[14px] border border-border-light shadow-card p-5">
+            {/* Header */}
+            <div className="flex items-start gap-3 mb-4">
+              <span className="shrink-0 w-7 h-7 rounded-full bg-primary-50 flex items-center justify-center text-[12px] font-bold font-display text-primary-600 mt-0.5">
+                {qi + 1}
+              </span>
+              <div className="flex-1 min-w-0">
+                <p className="font-body text-[14px] text-ink-primary leading-snug">{q.question_text}</p>
+                <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                  <span className="text-[11px] font-body text-ink-tertiary">
+                    {total} response{total !== 1 ? "s" : ""}
+                  </span>
+                  <span className={cn(
+                    "text-[11px] font-semibold font-body px-2 py-0.5 rounded-full",
+                    pct >= 75 ? "bg-green-50 text-green-700" :
+                    pct >= 50 ? "bg-amber-50 text-amber-700" :
+                    "bg-red-50 text-red-700"
+                  )}>
+                    {pct}% correct
+                  </span>
+                  {q.subtopic_tags?.map(tag => (
+                    <span key={tag} className="text-[11px] font-body px-2 py-0.5 rounded-full bg-primary-50 text-primary-600">{tag}</span>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Answer distribution */}
+            {total > 0 && (
+              <div className="space-y-2">
+                {distEntries.map(([answer, count]) => {
+                  const barPct = Math.round(count / total * 100)
+                  const isCorrect = answer === q.correct_answer ||
+                    (q.question_type === "true_false" && answer.toLowerCase() === q.correct_answer.toLowerCase())
+                  return (
+                    <div key={answer} className="flex items-center gap-3">
+                      <div className="w-4 h-4 shrink-0 flex items-center justify-center">
+                        {isCorrect
+                          ? <CheckCircle2 className="w-4 h-4 text-green-500" strokeWidth={2} />
+                          : <div className="w-3 h-3 rounded-full border-2 border-border-default" />
+                        }
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className={cn(
+                            "font-body text-[13px] truncate",
+                            isCorrect ? "font-semibold text-green-700" : "text-ink-secondary"
+                          )}>
+                            {answer}
+                          </span>
+                          <span className="font-body text-[12px] text-ink-tertiary shrink-0 ml-2">
+                            {count} ({barPct}%)
+                          </span>
+                        </div>
+                        <div className="h-2 bg-surface-secondary rounded-full overflow-hidden">
+                          <div
+                            className="h-full rounded-full transition-all"
+                            style={{
+                              width: `${barPct}%`,
+                              backgroundColor: isCorrect ? "#4CAF50" : "#9E9E9E",
+                            }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+
+            {/* Correct answer label for non-MCQ */}
+            {q.question_type !== "mcq" && q.question_type !== "true_false" && (
+              <p className="mt-3 text-[12px] font-body text-ink-tertiary">
+                Expected answer: <span className="font-semibold text-ink-secondary">{q.correct_answer}</span>
+              </p>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 // ── Page ───────────────────────────────────────────────────────
+
+const TABS = ["Overview", "Student Responses", "Question Analysis"] as const
+type TabName = typeof TABS[number]
 
 export default function AssessmentDiagnosticPage() {
   const { id } = useParams<{ id: string }>()
@@ -607,30 +804,68 @@ export default function AssessmentDiagnosticPage() {
 
   const [assessment, setAssessment] = useState<AssessmentDetail | null>(null)
   const [report, setReport] = useState<DiagnosticReport | null | undefined>(undefined)
+  const [responses, setResponses] = useState<AssessmentResponses | null>(null)
   const [loading, setLoading] = useState(true)
-  const [generating, setGenerating] = useState(false)
+  const [syncing, setSyncing] = useState(false)
   const [showReassessModal, setShowReassessModal] = useState(false)
+  const [activeTab, setActiveTab] = useState<TabName>("Overview")
+  const [responsesLoading, setResponsesLoading] = useState(false)
 
+  // Load assessment + report on mount; auto-generate if no report
   useEffect(() => {
-    Promise.all([api.getAssessment(id), api.getDiagnostics(id)])
-      .then(([a, r]) => {
+    async function load() {
+      try {
+        const [a, r] = await Promise.all([api.getAssessment(id), api.getDiagnostics(id)])
         setAssessment(a)
-        setReport(r)
-      })
-      .catch(() => toast.error("Failed to load assessment"))
-      .finally(() => setLoading(false))
+        if (r) {
+          setReport(r)
+        } else {
+          // Auto-generate
+          setSyncing(true)
+          try {
+            const generated = await api.generateDiagnostics(id)
+            setReport(generated)
+          } catch {
+            setReport(null)
+          } finally {
+            setSyncing(false)
+          }
+        }
+      } catch {
+        toast.error("Failed to load assessment")
+      } finally {
+        setLoading(false)
+      }
+    }
+    load()
   }, [id])
 
-  const handleGenerate = async () => {
-    setGenerating(true)
+  // Lazy-load responses when switching to those tabs
+  useEffect(() => {
+    if ((activeTab === "Student Responses" || activeTab === "Question Analysis") && !responses) {
+      setResponsesLoading(true)
+      api.getAssessmentResponses(id)
+        .then(setResponses)
+        .catch(() => toast.error("Failed to load responses"))
+        .finally(() => setResponsesLoading(false))
+    }
+  }, [activeTab, id, responses])
+
+  const handleSync = async () => {
+    setSyncing(true)
     try {
       const r = await api.generateDiagnostics(id)
       setReport(r)
-      toast.success("Diagnostic report generated!")
+      // Also refresh responses if loaded
+      if (responses) {
+        const r2 = await api.getAssessmentResponses(id)
+        setResponses(r2)
+      }
+      toast.success("Report synced!")
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Generation failed")
+      toast.error(err instanceof Error ? err.message : "Sync failed")
     } finally {
-      setGenerating(false)
+      setSyncing(false)
     }
   }
 
@@ -655,7 +890,7 @@ export default function AssessmentDiagnosticPage() {
     : 0
 
   return (
-    <div className="p-8 max-w-[1280px] mx-auto space-y-6">
+    <div className="p-4 md:p-8 max-w-[1280px] mx-auto space-y-6">
       {/* Back */}
       <button
         onClick={() => router.push("/dashboard/exams")}
@@ -668,138 +903,154 @@ export default function AssessmentDiagnosticPage() {
       {/* Header */}
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="font-display font-bold text-[28px] text-ink-primary leading-tight">
+          <h1 className="font-display font-bold text-[24px] md:text-[28px] text-ink-primary leading-tight">
             {assessment.title}
           </h1>
           <p className="font-body text-sm text-ink-secondary mt-1">
-            Diagnostic Report
+            Results & Diagnostics
             {report && (
               <span className="ml-2 text-ink-tertiary">
-                · Generated {new Date(report.generated_at).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" })}
+                · Updated {new Date(report.generated_at).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" })}
               </span>
             )}
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 shrink-0">
           <Button variant="secondary" size="sm" onClick={() => toast.info("Export coming soon")}>
             <Download className="w-4 h-4" />
-            Export
+            <span className="hidden sm:inline">Export</span>
           </Button>
-          <Button
-            variant="gradient"
-            size="sm"
-            onClick={handleGenerate}
-            disabled={generating}
-          >
-            {generating ? (
-              <><Loader2 className="w-4 h-4 animate-spin" /> Generating…</>
-            ) : (
-              <><RefreshCw className="w-4 h-4" /> {report ? "Regenerate" : "Generate Report"}</>
-            )}
+          <Button variant="secondary" size="sm" onClick={handleSync} disabled={syncing}>
+            <RefreshCw className={cn("w-4 h-4", syncing && "animate-spin")} />
+            <span className="hidden sm:inline">{syncing ? "Syncing…" : "Sync"}</span>
           </Button>
+          {report && (
+            <Button variant="gradient" size="sm" onClick={() => setShowReassessModal(true)}>
+              <Zap className="w-4 h-4" />
+              <span className="hidden sm:inline">Re-Assess</span>
+            </Button>
+          )}
         </div>
       </div>
 
-      {/* No report yet */}
-      {!report && !generating && (
-        <div className="bg-white rounded-[16px] border border-border-light shadow-card flex flex-col items-center justify-center py-20 gap-4 text-center">
-          <div className="w-16 h-16 rounded-full bg-primary-50 flex items-center justify-center">
-            <BarChart2 className="w-8 h-8 text-primary-400" strokeWidth={1.5} />
+      {/* Syncing / no report */}
+      {syncing && !report && (
+        <div className="bg-white rounded-[16px] border border-border-light shadow-card flex flex-col items-center justify-center py-16 gap-3">
+          <Loader2 className="w-8 h-8 text-primary-500 animate-spin" strokeWidth={1.75} />
+          <p className="font-body text-sm text-ink-secondary">Analyzing student data…</p>
+        </div>
+      )}
+
+      {!syncing && !report && (
+        <div className="bg-white rounded-[16px] border border-border-light shadow-card flex flex-col items-center justify-center py-16 gap-4 text-center">
+          <div className="w-14 h-14 rounded-full bg-primary-50 flex items-center justify-center">
+            <BarChart2 className="w-7 h-7 text-primary-400" strokeWidth={1.5} />
           </div>
           <div>
-            <p className="font-display font-semibold text-lg text-ink-primary">No diagnostic report yet</p>
-            <p className="font-body text-sm text-ink-tertiary mt-1 max-w-[320px]">
-              Generate a report after students have submitted their exams to see performance insights.
+            <p className="font-display font-semibold text-base text-ink-primary">No data yet</p>
+            <p className="font-body text-sm text-ink-tertiary mt-1 max-w-[300px]">
+              Once students submit, click Sync to generate the diagnostic report.
             </p>
           </div>
-          <Button variant="gradient" onClick={handleGenerate} disabled={generating}>
-            {generating ? <><Loader2 className="w-4 h-4 animate-spin" /> Generating…</> : "Generate Report"}
-          </Button>
         </div>
       )}
 
-      {/* Generating spinner */}
-      {generating && !report && (
-        <div className="bg-white rounded-[16px] border border-border-light shadow-card flex flex-col items-center justify-center py-20 gap-3">
-          <Loader2 className="w-8 h-8 text-primary-500 animate-spin" strokeWidth={1.75} />
-          <p className="font-body text-sm text-ink-secondary">Analyzing student data with AI…</p>
-        </div>
-      )}
-
-      {/* Report content */}
-      {report && (
+      {/* Tabs */}
+      {(report || responses) && (
         <>
-          {/* Stat cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-            <StatCard
-              label="Average Score"
-              value={`${report.avg_score}%`}
-              sub={`${report.student_summaries.length} student${report.student_summaries.length !== 1 ? "s" : ""}`}
-              icon={BarChart2}
-              color="#0072C6"
-            />
-            <StatCard
-              label="Mastery Rate"
-              value={`${report.mastery_rate}%`}
-              sub={`${report.student_summaries.filter((s) => s.pct >= 80).length} scored 80%+`}
-              icon={CheckCircle2}
-              color="#2D8A4E"
-            />
-            <StatCard
-              label="Learning Gaps"
-              value={String(criticalCount)}
-              sub={criticalCount === 0 ? "No critical gaps" : `critical subtopic${criticalCount !== 1 ? "s" : ""}`}
-              icon={Brain}
-              color={criticalCount > 0 ? "#E53935" : "#2D8A4E"}
-            />
+          <div className="flex items-center bg-surface-secondary rounded-[10px] p-1 gap-0.5 w-fit">
+            {TABS.map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={cn(
+                  "px-4 h-8 rounded-[8px] text-[13px] font-medium font-body transition-all whitespace-nowrap",
+                  activeTab === tab
+                    ? "bg-white text-ink-primary shadow-sm"
+                    : "text-ink-tertiary hover:text-ink-secondary"
+                )}
+              >
+                {tab}
+              </button>
+            ))}
           </div>
 
-          {/* Charts row */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-            <ScoreDistributionChart data={report.score_distribution} />
-            <SubtopicHeatmap data={report.subtopic_mastery} />
-          </div>
-
-          {/* Reteach + Student table */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-            <ReteachPanel topics={report.topics_to_reteach} questions={assessment.questions} />
-            <StudentTable students={report.student_summaries} />
-          </div>
-
-          {/* Class strengths */}
-          {report.class_strengths.length > 0 && (
-            <div className="bg-white rounded-[14px] border border-border-light shadow-card p-5">
-              <h3 className="font-display font-semibold text-base text-ink-primary mb-3">
-                Class Strengths
-              </h3>
-              <div className="flex flex-wrap gap-2">
-                {report.class_strengths.map((s) => (
-                  <div
-                    key={s.subtopic}
-                    className="flex items-center gap-2 px-3 py-1.5 rounded-full"
-                    style={{ backgroundColor: MASTERY_COLORS.mastered.bg }}
-                  >
-                    <CheckCircle2 className="w-3.5 h-3.5" style={{ color: MASTERY_COLORS.mastered.text }} strokeWidth={2} />
-                    <span className="font-body text-[13px] font-medium" style={{ color: MASTERY_COLORS.mastered.text }}>
-                      {s.subtopic} · {s.avg_pct}%
-                    </span>
-                  </div>
-                ))}
+          {/* Overview tab */}
+          {activeTab === "Overview" && report && (
+            <div className="space-y-5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                <StatCard
+                  label="Average Score"
+                  value={`${report.avg_score}%`}
+                  sub={`${report.student_summaries.length} student${report.student_summaries.length !== 1 ? "s" : ""}`}
+                  icon={BarChart2}
+                  color="#0072C6"
+                />
+                <StatCard
+                  label="Mastery Rate"
+                  value={`${report.mastery_rate}%`}
+                  sub={`${report.student_summaries.filter((s) => s.pct >= 80).length} scored 80%+`}
+                  icon={CheckCircle2}
+                  color="#2D8A4E"
+                />
+                <StatCard
+                  label="Learning Gaps"
+                  value={String(criticalCount)}
+                  sub={criticalCount === 0 ? "No critical gaps" : `critical subtopic${criticalCount !== 1 ? "s" : ""}`}
+                  icon={Brain}
+                  color={criticalCount > 0 ? "#E53935" : "#2D8A4E"}
+                />
               </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                <ScoreDistributionChart data={report.score_distribution} />
+                <SubtopicHeatmap data={report.subtopic_mastery} />
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                <ReteachPanel topics={report.topics_to_reteach} questions={assessment.questions} />
+                <StudentTable students={report.student_summaries} />
+              </div>
+
+              {report.class_strengths.length > 0 && (
+                <div className="bg-white rounded-[14px] border border-border-light shadow-card p-5">
+                  <h3 className="font-display font-semibold text-base text-ink-primary mb-3">Class Strengths</h3>
+                  <div className="flex flex-wrap gap-2">
+                    {report.class_strengths.map((s) => (
+                      <div
+                        key={s.subtopic}
+                        className="flex items-center gap-2 px-3 py-1.5 rounded-full"
+                        style={{ backgroundColor: MASTERY_COLORS.mastered.bg }}
+                      >
+                        <CheckCircle2 className="w-3.5 h-3.5" style={{ color: MASTERY_COLORS.mastered.text }} strokeWidth={2} />
+                        <span className="font-body text-[13px] font-medium" style={{ color: MASTERY_COLORS.mastered.text }}>
+                          {s.subtopic} · {s.avg_pct}%
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
-          {/* Action row */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 pb-4">
-            <Button variant="gradient" size="lg" onClick={() => setShowReassessModal(true)}>
-              <Zap className="w-4 h-4" />
-              Generate Re-Assessment
-            </Button>
-            <Button variant="secondary" size="lg" onClick={() => toast.info("Export coming soon")}>
-              <Download className="w-4 h-4" />
-              Export Report
-            </Button>
-          </div>
+          {/* Student Responses tab */}
+          {activeTab === "Student Responses" && (
+            responsesLoading
+              ? <div className="space-y-3">{[0,1,2].map(i => <Skeleton key={i} className="h-16 rounded-[14px]" />)}</div>
+              : responses
+              ? <StudentResponsesTab responses={responses} />
+              : null
+          )}
+
+          {/* Question Analysis tab */}
+          {activeTab === "Question Analysis" && (
+            responsesLoading
+              ? <div className="space-y-3">{[0,1,2].map(i => <Skeleton key={i} className="h-32 rounded-[14px]" />)}</div>
+              : responses
+              ? <QuestionAnalysisTab responses={responses} />
+              : null
+          )}
         </>
       )}
 

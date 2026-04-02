@@ -177,13 +177,14 @@ interface Breakdown {
 
 interface Step1Props {
   classes: ClassItem[]
+  existing?: AssessmentItem | null
   onDone: (result: { assessment: AssessmentItem; questions: QuestionItem[] }) => void
 }
 
-function Step1({ classes, onDone }: Step1Props) {
-  const [title, setTitle] = useState("")
-  const [classId, setClassId] = useState("")
-  const [difficulty, setDifficulty] = useState<DifficultyLevel>("medium")
+function Step1({ classes, existing, onDone }: Step1Props) {
+  const [title, setTitle] = useState(existing?.title ?? "")
+  const [classId, setClassId] = useState(existing?.class_id ?? "")
+  const [difficulty, setDifficulty] = useState<DifficultyLevel>(existing?.difficulty ?? "medium")
   const [breakdown, setBreakdown] = useState<Breakdown>({
     mcq: 5,
     true_false: 3,
@@ -237,23 +238,42 @@ function Step1({ classes, onDone }: Step1Props) {
   const handleGenerate = async () => {
     if (!title.trim()) return toast.error("Enter a title")
     if (!classId) return toast.error("Select a class")
-    if (!materialId) return toast.error("Upload a source material")
     if (total === 0) return toast.error("Add at least one question")
 
     setGenerating(true)
     try {
-      const assessment = await api.createAssessment({
-        title: title.trim(),
-        class_id: classId,
-        difficulty,
-        source_material_id: materialId,
-      })
+      let assessment: AssessmentItem
+
+      if (existing) {
+        // Editing existing — update metadata only if changed
+        assessment = await api.updateAssessment(existing.id, {
+          title: title.trim(),
+          class_id: classId,
+          difficulty,
+        })
+
+        if (!materialId) {
+          // No new material — skip regeneration, go straight to review
+          const detail = await api.getAssessment(existing.id)
+          onDone({ assessment, questions: detail.questions })
+          return
+        }
+      } else {
+        if (!materialId) return toast.error("Upload a source material")
+        assessment = await api.createAssessment({
+          title: title.trim(),
+          class_id: classId,
+          difficulty,
+          source_material_id: materialId,
+        })
+      }
 
       const activeBreakdown = Object.fromEntries(
         Object.entries(breakdown).filter(([, v]) => v > 0)
       )
 
-      const questions = await api.generateQuestions(assessment.id, {
+      const newId = existing ? existing.id : assessment.id
+      const questions = await api.generateQuestions(newId, {
         question_breakdown: activeBreakdown,
         subject: selectedClass?.subject ?? "",
         grade_level: selectedClass?.grade_level ?? "",
@@ -451,7 +471,7 @@ function Step1({ classes, onDone }: Step1Props) {
 
         <Button variant="gradient" size="lg" className="w-full mt-2" onClick={handleGenerate} disabled={generating}>
           {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-          Generate Exam
+          {existing ? (materialId ? "Regenerate Questions" : "Save & Continue") : "Generate Exam"}
         </Button>
       </div>
     </>
@@ -1176,7 +1196,7 @@ export default function CreateExamPage() {
       </button>
 
       <h1 className="font-display font-bold text-[28px] text-ink-primary mb-6">
-        {step === 0 ? "Create New Exam" : step === 1 ? "Review Questions" : "Publish Exam"}
+        {step === 0 ? (assessment ? "Edit Exam" : "Create New Exam") : step === 1 ? "Review Questions" : "Publish Exam"}
       </h1>
 
       <StepBar current={step} />
@@ -1184,6 +1204,7 @@ export default function CreateExamPage() {
       {step === 0 && (
         <Step1
           classes={classes}
+          existing={assessment}
           onDone={({ assessment: a, questions: qs }) => {
             setAssessment(a)
             setQuestions(qs)
@@ -1202,7 +1223,10 @@ export default function CreateExamPage() {
               setStep(2)
             }}
           />
-          <div className="flex justify-end mt-6">
+          <div className="flex items-center justify-between mt-6">
+            <Button variant="secondary" onClick={() => setStep(0)}>
+              ← Configure
+            </Button>
             <Button variant="gradient" onClick={() => setStep(2)}>
               Continue to Publish
             </Button>
@@ -1211,7 +1235,14 @@ export default function CreateExamPage() {
       )}
 
       {step === 2 && assessment && (
-        <Step3 assessment={assessment} questions={questions} classes={classes} />
+        <>
+          <div className="mb-6">
+            <Button variant="secondary" onClick={() => setStep(1)}>
+              ← Review Questions
+            </Button>
+          </div>
+          <Step3 assessment={assessment} questions={questions} classes={classes} />
+        </>
       )}
     </div>
   )

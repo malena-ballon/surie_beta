@@ -8,8 +8,9 @@ import {
   Search,
   FileText,
   BarChart2,
-  Archive,
   Trash2,
+  ChevronDown,
+  X,
 } from "lucide-react"
 import { toast } from "sonner"
 import { api, type AssessmentItem, type AssessmentStatus, type ClassItem } from "@/lib/api"
@@ -48,6 +49,10 @@ function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" })
 }
 
+function isReassessment(title: string) {
+  return /re-?assess/i.test(title)
+}
+
 // ── Assessment card ────────────────────────────────────────────
 
 function AssessmentCard({
@@ -57,9 +62,8 @@ function AssessmentCard({
 }: {
   item: AssessmentItem
   className: ClassItem | undefined
-  onAction: (type: "edit" | "results" | "archive" | "delete") => void
+  onAction: (type: "edit" | "results" | "delete") => void
 }) {
-  const isDraft = item.status === "draft"
   const canViewResults = item.status === "published" || item.status === "closed"
   const [confirmDelete, setConfirmDelete] = useState(false)
 
@@ -67,10 +71,17 @@ function AssessmentCard({
     <div className="bg-white rounded-[14px] border border-border-light shadow-card p-5 flex flex-col gap-3 hover:shadow-card-hover transition-shadow duration-[250ms]">
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0">
-          <h3 className="font-display font-semibold text-base text-ink-primary leading-tight truncate">
-            {item.title}
-          </h3>
-          <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+          <div className="flex items-center gap-1.5 mb-1">
+            <h3 className="font-display font-semibold text-base text-ink-primary leading-tight truncate">
+              {item.title}
+            </h3>
+            {isReassessment(item.title) && (
+              <span className="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-accent-50 text-accent-700">
+                Re-assess
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
             {classItem && (
               <span className="text-[12px] font-body text-ink-secondary truncate">
                 {classItem.name}
@@ -93,7 +104,8 @@ function AssessmentCard({
       </div>
 
       <div className="flex items-center gap-2 pt-3 border-t border-border-light">
-        {isDraft && (
+        {/* Edit available for all non-archived */}
+        {item.status !== "archived" && (
           <button
             onClick={() => onAction("edit")}
             className="flex items-center gap-1.5 text-[12px] font-medium font-body text-primary-500 hover:text-primary-600 transition-colors"
@@ -143,6 +155,34 @@ function AssessmentCard({
   )
 }
 
+// ── Filter select ──────────────────────────────────────────────
+
+function FilterSelect({
+  value,
+  onChange,
+  children,
+  placeholder,
+}: {
+  value: string
+  onChange: (v: string) => void
+  children: React.ReactNode
+  placeholder: string
+}) {
+  return (
+    <div className="relative">
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="h-[38px] pl-3 pr-8 text-sm font-body text-ink-primary bg-white border border-border-default rounded-[10px] focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-colors appearance-none cursor-pointer"
+      >
+        <option value="">{placeholder}</option>
+        {children}
+      </select>
+      <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink-tertiary pointer-events-none" />
+    </div>
+  )
+}
+
 // ── Page ───────────────────────────────────────────────────────
 
 const inputCls =
@@ -156,14 +196,21 @@ export default function ExamsPage() {
   const [activeTab, setActiveTab] = useState<AssessmentStatus | "all">("all")
   const [search, setSearch] = useState("")
 
-  const fetchData = async (status: AssessmentStatus | "all", q: string) => {
+  // Filters
+  const [filterClass, setFilterClass] = useState("")
+  const [filterType, setFilterType] = useState("") // "" | "regular" | "reassessment"
+  const [filterFrom, setFilterFrom] = useState("")
+  const [filterTo, setFilterTo] = useState("")
+
+  const fetchData = async (status: AssessmentStatus | "all", q: string, classId: string) => {
     setLoading(true)
     try {
       const [asmt, cls] = await Promise.all([
         api.getAssessments({
           status: status === "all" ? undefined : status,
           search: q || undefined,
-          per_page: 50,
+          class_id: classId || undefined,
+          per_page: 100,
         }),
         api.getClasses({ per_page: 100 }),
       ])
@@ -177,25 +224,41 @@ export default function ExamsPage() {
   }
 
   useEffect(() => {
-    fetchData(activeTab, search)
+    fetchData(activeTab, search, filterClass)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab])
+  }, [activeTab, filterClass])
 
-  // Debounce search
   useEffect(() => {
-    const t = setTimeout(() => fetchData(activeTab, search), 350)
+    const t = setTimeout(() => fetchData(activeTab, search, filterClass), 350)
     return () => clearTimeout(t)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search])
 
   const classMap = Object.fromEntries(classes.map((c) => [c.id, c]))
 
-  const handleAction = async (item: AssessmentItem, type: "edit" | "results" | "archive" | "delete") => {
+  // Client-side type + date filtering
+  const filtered = assessments.filter((a) => {
+    if (filterType === "reassessment" && !isReassessment(a.title)) return false
+    if (filterType === "regular" && isReassessment(a.title)) return false
+    if (filterFrom && new Date(a.created_at) < new Date(filterFrom)) return false
+    if (filterTo && new Date(a.created_at) > new Date(filterTo + "T23:59:59")) return false
+    return true
+  })
+
+  const hasFilters = filterClass || filterType || filterFrom || filterTo
+  const clearFilters = () => {
+    setFilterClass("")
+    setFilterType("")
+    setFilterFrom("")
+    setFilterTo("")
+  }
+
+  const handleAction = async (item: AssessmentItem, type: "edit" | "results" | "delete") => {
     if (type === "edit") {
       router.push(`/dashboard/exams/create?id=${item.id}`)
     } else if (type === "results") {
       router.push(`/dashboard/assessments/${item.id}`)
-    } else if (type === "delete") {
+    } else {
       try {
         await api.deleteAssessment(item.id)
         setAssessments((prev) => prev.filter((a) => a.id !== item.id))
@@ -203,8 +266,6 @@ export default function ExamsPage() {
       } catch {
         toast.error("Failed to delete exam")
       }
-    } else {
-      toast.info("Archive coming soon")
     }
   }
 
@@ -227,36 +288,84 @@ export default function ExamsPage() {
         </Button>
       </div>
 
-      {/* Filter bar */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 mb-6">
-        {/* Status tabs */}
-        <div className="flex items-center bg-surface-secondary rounded-[10px] p-1 gap-0.5">
-          {STATUS_TABS.map((tab) => (
-            <button
-              key={tab.value}
-              onClick={() => setActiveTab(tab.value)}
-              className={cn(
-                "px-4 h-8 rounded-[8px] text-[13px] font-medium font-body transition-all",
-                activeTab === tab.value
-                  ? "bg-white text-ink-primary shadow-sm"
-                  : "text-ink-tertiary hover:text-ink-secondary"
-              )}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
+      {/* Status tabs */}
+      <div className="flex items-center bg-surface-secondary rounded-[10px] p-1 gap-0.5 mb-4 w-fit">
+        {STATUS_TABS.map((tab) => (
+          <button
+            key={tab.value}
+            onClick={() => setActiveTab(tab.value)}
+            className={cn(
+              "px-4 h-8 rounded-[8px] text-[13px] font-medium font-body transition-all",
+              activeTab === tab.value
+                ? "bg-white text-ink-primary shadow-sm"
+                : "text-ink-tertiary hover:text-ink-secondary"
+            )}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
 
+      {/* Filter bar */}
+      <div className="flex flex-wrap items-center gap-2 mb-6">
         {/* Search */}
-        <div className="relative flex-1 max-w-[280px]">
+        <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink-tertiary" />
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search exams…"
-            className={cn(inputCls, "pl-8 w-full")}
+            className={cn(inputCls, "pl-8 w-[200px]")}
           />
         </div>
+
+        {/* Class filter */}
+        <FilterSelect value={filterClass} onChange={setFilterClass} placeholder="All Classes">
+          {classes.map((c) => (
+            <option key={c.id} value={c.id}>{c.name}</option>
+          ))}
+        </FilterSelect>
+
+        {/* Type filter */}
+        <FilterSelect value={filterType} onChange={setFilterType} placeholder="All Types">
+          <option value="regular">Regular</option>
+          <option value="reassessment">Reassessment</option>
+        </FilterSelect>
+
+        {/* Date from */}
+        <input
+          type="date"
+          value={filterFrom}
+          onChange={(e) => setFilterFrom(e.target.value)}
+          className={cn(inputCls, "w-[150px] cursor-pointer")}
+          title="From date"
+        />
+        <span className="text-[12px] text-ink-tertiary font-body">–</span>
+        <input
+          type="date"
+          value={filterTo}
+          onChange={(e) => setFilterTo(e.target.value)}
+          className={cn(inputCls, "w-[150px] cursor-pointer")}
+          title="To date"
+        />
+
+        {/* Clear filters */}
+        {hasFilters && (
+          <button
+            onClick={clearFilters}
+            className="flex items-center gap-1 text-[12px] font-body font-medium text-ink-tertiary hover:text-danger-500 transition-colors"
+          >
+            <X className="w-3.5 h-3.5" />
+            Clear
+          </button>
+        )}
+
+        {/* Result count */}
+        {!loading && (
+          <span className="text-[12px] font-body text-ink-tertiary ml-auto">
+            {filtered.length} exam{filtered.length !== 1 ? "s" : ""}
+          </span>
+        )}
       </div>
 
       {/* Content */}
@@ -266,21 +375,23 @@ export default function ExamsPage() {
             <Skeleton key={i} className="h-[152px] rounded-[14px]" />
           ))}
         </div>
-      ) : assessments.length === 0 ? (
+      ) : filtered.length === 0 ? (
         <EmptyState
           icon={BookOpen}
-          title="No exams yet"
+          title="No exams found"
           description={
-            activeTab === "all"
+            hasFilters
+              ? "No exams match your current filters."
+              : activeTab === "all"
               ? "Create your first AI-powered exam to get started."
               : `No ${activeTab} exams found.`
           }
-          actionLabel="Create Exam"
-          onAction={() => router.push("/dashboard/exams/create")}
+          actionLabel={hasFilters ? "Clear Filters" : "Create Exam"}
+          onAction={hasFilters ? clearFilters : () => router.push("/dashboard/exams/create")}
         />
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-          {assessments.map((item) => (
+          {filtered.map((item) => (
             <AssessmentCard
               key={item.id}
               item={item}

@@ -8,8 +8,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
 from app.core.database import get_db
-from app.models import Assessment, User, UserRole
+from app.models import Assessment, Question, User, UserRole
 from app.models.diagnostic_report import DiagnosticReport
+from app.models.response import Response as ResponseModel
+from app.models.submission import Submission, SubmissionStatus
 from app.services.diagnostic_service import generate_diagnostic_report
 from app.services.reassessment_service import generate_class_reassessment
 
@@ -118,6 +120,100 @@ async def generate_reassessment(
             "status": new_assessment.status.value if hasattr(new_assessment.status, "value") else new_assessment.status,
             "question_count": 0,
         }
+
+
+@router.get("/{assessment_id}/responses")
+async def get_assessment_responses(
+    assessment_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    await _get_assessment_or_403(assessment_id, db, current_user)
+
+    # Questions
+    q_result = await db.execute(
+        select(Question)
+        .where(Question.assessment_id == assessment_id)
+        .order_by(Question.display_order)
+    )
+    questions = q_result.scalars().all()
+    question_map = {q.id: q for q in questions}
+
+    # Submitted/graded submissions + student info
+    sub_result = await db.execute(
+        select(Submission, User)
+        .join(User, Submission.student_id == User.id)
+        .where(
+            Submission.assessment_id == assessment_id,
+            Submission.status.in_([
+                SubmissionStatus.graded,
+                SubmissionStatus.pending_review,
+                SubmissionStatus.submitted,
+            ]),
+        )
+    )
+    rows = sub_result.all()
+
+    # Per-question tallies
+    answer_tally: dict[uuid.UUID, dict[str, int]] = {q.id: {} for q in questions}
+    correct_count: dict[uuid.UUID, int] = {q.id: 0 for q in questions}
+    response_count: dict[uuid.UUID, int] = {q.id: 0 for q in questions}
+
+    student_responses = []
+    for submission, student in rows:
+        r_result = await db.execute(
+            select(ResponseModel).where(ResponseModel.submission_id == submission.id)
+        )
+        responses = r_result.scalars().all()
+        resp_list = []
+        for r in responses:
+            q = question_map.get(r.question_id)
+            if not q:
+                continue
+            resp_list.append({
+                "question_id": str(r.question_id),
+                "student_answer": r.student_answer,
+                "is_correct": r.is_correct,
+                "score": r.score,
+            })
+            ans = r.student_answer or "(no answer)"
+            answer_tally[r.question_id][ans] = answer_tally[r.question_id].get(ans, 0) + 1
+            response_count[r.question_id] += 1
+            if r.is_correct:
+                correct_count[r.question_id] += 1
+
+        student_responses.append({
+            "student_id": str(student.id),
+            "student_name": f"{student.first_name} {student.last_name}",
+            "submission_id": str(submission.id),
+            "status": submission.status.value,
+            "total_score": submission.total_score,
+            "max_score": float(submission.max_score),
+            "submitted_at": submission.submitted_at.isoformat() if submission.submitted_at else None,
+            "responses": resp_list,
+        })
+
+    question_analysis = []
+    for q in questions:
+        total = response_count[q.id]
+        correct = correct_count[q.id]
+        question_analysis.append({
+            "question_id": str(q.id),
+            "question_text": q.question_text,
+            "question_type": q.question_type.value if hasattr(q.question_type, "value") else q.question_type,
+            "choices": q.choices,
+            "correct_answer": q.correct_answer,
+            "subtopic_tags": q.subtopic_tags,
+            "total_responses": total,
+            "correct_count": correct,
+            "correct_pct": round(correct / total * 100) if total else 0,
+            "answer_distribution": answer_tally[q.id],
+        })
+
+    return {
+        "student_responses": student_responses,
+        "question_analysis": question_analysis,
+    }
 
 
 @router.get("/{assessment_id}/diagnostics/students")

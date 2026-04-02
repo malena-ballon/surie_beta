@@ -4,10 +4,12 @@ import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import {
   BarChart3,
+  ChevronDown,
   ChevronRight,
   FileText,
   TrendingUp,
   Users,
+  X,
 } from "lucide-react"
 import { toast } from "sonner"
 import { api, type AssessmentItem, type ClassItem, type DiagnosticReport } from "@/lib/api"
@@ -35,6 +37,31 @@ function masteryLevel(pct: number) {
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" })
+}
+
+function isReassessment(title: string) {
+  return /re-?assess/i.test(title)
+}
+
+const inputCls =
+  "h-[38px] px-[14px] text-sm font-body text-ink-primary placeholder:text-ink-tertiary bg-white border border-border-default rounded-[10px] focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-colors"
+
+function FilterSelect({ value, onChange, children, placeholder }: {
+  value: string; onChange: (v: string) => void; children: React.ReactNode; placeholder: string
+}) {
+  return (
+    <div className="relative">
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="h-[38px] pl-3 pr-8 text-sm font-body text-ink-primary bg-white border border-border-default rounded-[10px] focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-colors appearance-none cursor-pointer"
+      >
+        <option value="">{placeholder}</option>
+        {children}
+      </select>
+      <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink-tertiary pointer-events-none" />
+    </div>
+  )
 }
 
 function MasteryPill({ pct }: { pct: number }) {
@@ -140,6 +167,10 @@ export default function ReportsPage() {
   const [classes, setClasses] = useState<ClassItem[]>([])
   const [reports, setReports] = useState<Record<string, DiagnosticReport | null>>({})
   const [loading, setLoading] = useState(true)
+  const [filterClass, setFilterClass] = useState("")
+  const [filterType, setFilterType] = useState("")
+  const [filterFrom, setFilterFrom] = useState("")
+  const [filterTo, setFilterTo] = useState("")
 
   useEffect(() => {
     async function load() {
@@ -176,6 +207,18 @@ export default function ReportsPage() {
   }, [])
 
   const classMap = Object.fromEntries(classes.map((c) => [c.id, c]))
+
+  // Filtering
+  const filtered = assessments.filter((a) => {
+    if (filterClass && a.class_id !== filterClass) return false
+    if (filterType === "reassessment" && !isReassessment(a.title)) return false
+    if (filterType === "regular" && isReassessment(a.title)) return false
+    if (filterFrom && new Date(a.created_at) < new Date(filterFrom)) return false
+    if (filterTo && new Date(a.created_at) > new Date(filterTo + "T23:59:59")) return false
+    return true
+  })
+  const hasFilters = filterClass || filterType || filterFrom || filterTo
+  const clearFilters = () => { setFilterClass(""); setFilterType(""); setFilterFrom(""); setFilterTo("") }
 
   // Summary stats
   const withReports = Object.values(reports).filter(Boolean) as DiagnosticReport[]
@@ -238,6 +281,46 @@ export default function ReportsPage() {
         </div>
       )}
 
+      {/* Filter bar */}
+      {!loading && assessments.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 mb-2">
+          <FilterSelect value={filterClass} onChange={setFilterClass} placeholder="All Classes">
+            {classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </FilterSelect>
+          <FilterSelect value={filterType} onChange={setFilterType} placeholder="All Types">
+            <option value="regular">Regular</option>
+            <option value="reassessment">Reassessment</option>
+          </FilterSelect>
+          <input
+            type="date"
+            value={filterFrom}
+            onChange={(e) => setFilterFrom(e.target.value)}
+            className={cn(inputCls, "w-[150px] cursor-pointer")}
+            title="From date"
+          />
+          <span className="text-[12px] text-ink-tertiary font-body">–</span>
+          <input
+            type="date"
+            value={filterTo}
+            onChange={(e) => setFilterTo(e.target.value)}
+            className={cn(inputCls, "w-[150px] cursor-pointer")}
+            title="To date"
+          />
+          {hasFilters && (
+            <button
+              onClick={clearFilters}
+              className="flex items-center gap-1 text-[12px] font-body font-medium text-ink-tertiary hover:text-danger-500 transition-colors"
+            >
+              <X className="w-3.5 h-3.5" />
+              Clear
+            </button>
+          )}
+          <span className="text-[12px] font-body text-ink-tertiary ml-auto">
+            {filtered.length} result{filtered.length !== 1 ? "s" : ""}
+          </span>
+        </div>
+      )}
+
       {/* Assessment list */}
       {loading ? (
         <div className="space-y-4">
@@ -245,17 +328,17 @@ export default function ReportsPage() {
             <Skeleton key={i} className="h-[88px] rounded-[14px]" />
           ))}
         </div>
-      ) : assessments.length === 0 ? (
+      ) : filtered.length === 0 ? (
         <EmptyState
           icon={FileText}
-          title="No published assessments"
-          description="Publish an assessment and generate a diagnostic report to see results here."
-          actionLabel="Go to Exam Library"
-          onAction={() => router.push("/dashboard/exams")}
+          title={hasFilters ? "No results match filters" : "No published assessments"}
+          description={hasFilters ? "Try adjusting your filters." : "Publish an assessment to see results here."}
+          actionLabel={hasFilters ? "Clear Filters" : "Go to Exam Library"}
+          onAction={hasFilters ? clearFilters : () => router.push("/dashboard/exams")}
         />
       ) : (
         <div className="space-y-4">
-          {assessments.map((a) => (
+          {filtered.map((a) => (
             <ReportRow
               key={a.id}
               assessment={a}
