@@ -183,6 +183,7 @@ interface Step1Props {
 
 function Step1({ classes, existing, onDone }: Step1Props) {
   const [title, setTitle] = useState(existing?.title ?? "")
+  const [description, setDescription] = useState(existing?.description ?? "")
   const [classId, setClassId] = useState(existing?.class_id ?? "")
   const [difficulty, setDifficulty] = useState<DifficultyLevel>(existing?.difficulty ?? "medium")
   const [breakdown, setBreakdown] = useState<Breakdown>({
@@ -248,6 +249,7 @@ function Step1({ classes, existing, onDone }: Step1Props) {
         // Editing existing — update metadata only if changed
         assessment = await api.updateAssessment(existing.id, {
           title: title.trim(),
+          description: description.trim() || null,
           class_id: classId,
           difficulty,
         })
@@ -262,6 +264,7 @@ function Step1({ classes, existing, onDone }: Step1Props) {
         if (!materialId) return toast.error("Upload a source material")
         assessment = await api.createAssessment({
           title: title.trim(),
+          description: description.trim() || null,
           class_id: classId,
           difficulty,
           source_material_id: materialId,
@@ -302,6 +305,20 @@ function Step1({ classes, existing, onDone }: Step1Props) {
             onChange={(e) => setTitle(e.target.value)}
             placeholder="e.g. Unit 3 Quiz: Cellular Respiration"
             className={inputCls}
+          />
+        </div>
+
+        {/* Description */}
+        <div className="space-y-1.5">
+          <label className="text-[13px] font-medium text-ink-secondary font-body">
+            Description <span className="text-ink-tertiary font-normal">(optional)</span>
+          </label>
+          <textarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="Instructions or context shown to students before they start the exam…"
+            rows={3}
+            className={cn(inputCls, "h-auto resize-none py-3 leading-relaxed")}
           />
         </div>
 
@@ -1052,9 +1069,24 @@ function Step3({ assessment, questions, classes }: Step3Props) {
   const router = useRouter()
   const [startAt, setStartAt] = useState("")
   const [endAt, setEndAt] = useState("")
+  const [timeLimitHH, setTimeLimitHH] = useState(
+    assessment.time_limit_minutes
+      ? String(Math.floor(assessment.time_limit_minutes / 60)).padStart(2, "0")
+      : ""
+  )
+  const [timeLimitMM, setTimeLimitMM] = useState(
+    assessment.time_limit_minutes
+      ? String(assessment.time_limit_minutes % 60).padStart(2, "0")
+      : ""
+  )
   const [publishing, setPublishing] = useState(false)
 
   const cls = classes.find((c) => c.id === assessment.class_id)
+
+  const timeLimitMinutes =
+    timeLimitHH || timeLimitMM
+      ? (parseInt(timeLimitHH || "0", 10) * 60) + parseInt(timeLimitMM || "0", 10)
+      : null
 
   const handlePublish = async () => {
     setPublishing(true)
@@ -1062,6 +1094,7 @@ function Step3({ assessment, questions, classes }: Step3Props) {
       await api.publishAssessment(assessment.id, {
         start_at: startAt || undefined,
         end_at: endAt || undefined,
+        time_limit_minutes: timeLimitMinutes,
       })
       toast.success("Assessment published!")
       router.push("/dashboard/exams")
@@ -1138,6 +1171,48 @@ function Step3({ assessment, questions, classes }: Step3Props) {
             </span>
           </p>
         )}
+      </div>
+
+      {/* Time limit */}
+      <div className="bg-white rounded-[14px] border border-border-light shadow-card p-6 space-y-4">
+        <h3 className="font-display font-semibold text-base text-ink-primary">
+          Time Limit <span className="text-ink-tertiary font-body font-normal text-sm">(optional)</span>
+        </h3>
+        <p className="text-[12px] font-body text-ink-tertiary -mt-2">
+          Students must complete the exam within this duration once they start.
+        </p>
+        <div className="flex items-center gap-2">
+          <div className="space-y-1.5">
+            <label className="text-[12px] font-medium text-ink-secondary font-body">Hours</label>
+            <input
+              type="number"
+              min={0}
+              max={23}
+              value={timeLimitHH}
+              onChange={(e) => setTimeLimitHH(e.target.value.replace(/\D/, "").slice(0, 2))}
+              placeholder="00"
+              className="w-[72px] h-[42px] px-3 text-center text-sm font-body text-ink-primary bg-white border border-border-default rounded-[10px] focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-colors tabular-nums"
+            />
+          </div>
+          <span className="font-display font-bold text-xl text-ink-tertiary mt-5">:</span>
+          <div className="space-y-1.5">
+            <label className="text-[12px] font-medium text-ink-secondary font-body">Minutes</label>
+            <input
+              type="number"
+              min={0}
+              max={59}
+              value={timeLimitMM}
+              onChange={(e) => setTimeLimitMM(e.target.value.replace(/\D/, "").slice(0, 2))}
+              placeholder="00"
+              className="w-[72px] h-[42px] px-3 text-center text-sm font-body text-ink-primary bg-white border border-border-default rounded-[10px] focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-colors tabular-nums"
+            />
+          </div>
+          {timeLimitMinutes !== null && timeLimitMinutes > 0 && (
+            <p className="text-[12px] font-body text-ink-tertiary mt-5 ml-2">
+              = {timeLimitMinutes} minute{timeLimitMinutes !== 1 ? "s" : ""}
+            </p>
+          )}
+        </div>
       </div>
 
       <Button

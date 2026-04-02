@@ -44,6 +44,13 @@ interface Question {
   display_order: number
 }
 
+interface AssessmentMeta {
+  title: string
+  description: string | null
+  time_limit_minutes: number | null
+  end_at: string | null
+}
+
 interface Submission {
   id: string
   assessment_id: string
@@ -66,20 +73,30 @@ interface SubmissionResult {
 
 // ── Countdown timer ────────────────────────────────────────────
 
-function useCountdown(endAt: string | null) {
+// startedAt: ISO string when the exam was started
+// timeLimitMinutes: duration in minutes (overrides endAt if set)
+// endAt: absolute deadline from assessment window
+function useCountdown(startedAt: string | null, timeLimitMinutes: number | null, endAt: string | null) {
   const [secs, setSecs] = useState<number | null>(null)
 
   useEffect(() => {
-    if (!endAt) return
-    const end = new Date(endAt).getTime()
+    // Determine effective end time
+    let effectiveEnd: number | null = null
+    if (startedAt && timeLimitMinutes) {
+      effectiveEnd = new Date(startedAt).getTime() + timeLimitMinutes * 60 * 1000
+    } else if (endAt) {
+      effectiveEnd = new Date(endAt).getTime()
+    }
+    if (!effectiveEnd) return
+
     const update = () => {
-      const diff = Math.max(0, Math.floor((end - Date.now()) / 1000))
+      const diff = Math.max(0, Math.floor((effectiveEnd! - Date.now()) / 1000))
       setSecs(diff)
     }
     update()
     const t = setInterval(update, 1000)
     return () => clearInterval(t)
-  }, [endAt])
+  }, [startedAt, timeLimitMinutes, endAt])
 
   return secs
 }
@@ -266,6 +283,93 @@ function ConfirmDialog({
   )
 }
 
+// ── Intro screen ───────────────────────────────────────────────
+
+function IntroScreen({
+  meta,
+  onStart,
+  starting,
+}: {
+  meta: AssessmentMeta
+  onStart: () => void
+  starting: boolean
+}) {
+  function formatLimit(minutes: number) {
+    const h = Math.floor(minutes / 60)
+    const m = minutes % 60
+    if (h > 0 && m > 0) return `${h} hr ${m} min`
+    if (h > 0) return `${h} hr`
+    return `${m} min`
+  }
+
+  return (
+    <div className="min-h-screen bg-surface-body flex items-center justify-center p-6">
+      <div className="bg-white rounded-2xl shadow-card p-10 max-w-[520px] w-full flex flex-col gap-6">
+        {/* Title */}
+        <div>
+          <p className="text-[11px] font-semibold font-body uppercase tracking-widest text-ink-tertiary mb-2">
+            Exam
+          </p>
+          <h1 className="font-display font-bold text-2xl text-ink-primary leading-tight">
+            {meta.title}
+          </h1>
+        </div>
+
+        {/* Description */}
+        {meta.description && (
+          <p className="font-body text-sm text-ink-secondary leading-relaxed border-l-4 border-primary-200 pl-4">
+            {meta.description}
+          </p>
+        )}
+
+        {/* Info row */}
+        <div className="flex flex-wrap gap-4">
+          {meta.time_limit_minutes && (
+            <div className="flex items-center gap-2 text-sm font-body text-ink-secondary">
+              <Clock className="w-4 h-4 text-primary-500 shrink-0" />
+              <span>
+                Time limit: <span className="font-semibold text-ink-primary">{formatLimit(meta.time_limit_minutes)}</span>
+              </span>
+            </div>
+          )}
+          {meta.end_at && (
+            <div className="flex items-center gap-2 text-sm font-body text-ink-secondary">
+              <Clock className="w-4 h-4 text-ink-tertiary shrink-0" />
+              <span>
+                Closes:{" "}
+                <span className="font-semibold text-ink-primary">
+                  {new Date(meta.end_at).toLocaleString("en-PH", { dateStyle: "medium", timeStyle: "short" })}
+                </span>
+              </span>
+            </div>
+          )}
+        </div>
+
+        {meta.time_limit_minutes && (
+          <p className="text-[12px] font-body text-amber-700 bg-amber-50 rounded-xl px-4 py-3">
+            The timer starts when you click <strong>Start Exam</strong>. Make sure you are ready.
+          </p>
+        )}
+
+        <button
+          onClick={onStart}
+          disabled={starting}
+          className="w-full py-3.5 rounded-xl bg-gradient-to-r from-primary-500 to-accent-500 text-white font-semibold font-body text-sm transition-opacity hover:opacity-90 disabled:opacity-60 flex items-center justify-center gap-2"
+        >
+          {starting ? (
+            <>
+              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              Starting…
+            </>
+          ) : (
+            "Start Exam"
+          )}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 // ── Main page ──────────────────────────────────────────────────
 
 export default function ExamPage() {
@@ -275,55 +379,69 @@ export default function ExamPage() {
   const assessmentId = params.id
   const existingSubId = searchParams.get("sub")
 
+  const [meta, setMeta] = useState<AssessmentMeta | null>(null)
+  const [showIntro, setShowIntro] = useState(true)
   const [submission, setSubmission] = useState<Submission | null>(null)
   const [answers, setAnswers] = useState<Record<string, string>>({})
   const [current, setCurrent] = useState(0)
   const [loading, setLoading] = useState(true)
+  const [starting, setStarting] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [result, setResult] = useState<SubmissionResult | null>(null)
   const [showConfirm, setShowConfirm] = useState(false)
-  const [endAt, setEndAt] = useState<string | null>(null)
-  const secs = useCountdown(endAt)
+  const secs = useCountdown(
+    submission?.started_at ?? null,
+    meta?.time_limit_minutes ?? null,
+    meta?.end_at ?? null
+  )
   const autoSaveRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  // Load assessment info for end_at
+  // Load assessment metadata
   useEffect(() => {
-    const loadAssessment = async () => {
-      try {
-        const data = await req<{ end_at: string | null }>(`/api/v1/assessments/${assessmentId}`)
-        setEndAt(data.end_at)
-      } catch {
-        // ignore
-      }
-    }
-    loadAssessment()
-  }, [assessmentId])
+    req<AssessmentMeta>(`/api/v1/assessments/${assessmentId}`)
+      .then((data) => setMeta(data))
+      .catch(() => {})
+      .finally(() => {
+        if (!existingSubId) setLoading(false)
+      })
+  }, [assessmentId, existingSubId])
 
-  // Start or resume submission
+  // If resuming an existing submission, skip intro and load it immediately
   useEffect(() => {
-    const start = async () => {
+    if (!existingSubId) return
+    const resume = async () => {
       try {
-        let sub: Submission
-        if (existingSubId) {
-          // Resume: use dedicated endpoint that returns submission + questions
-          sub = await req<Submission>(`/api/v1/submissions/${existingSubId}/resume`)
-        } else {
-          sub = await req<Submission>("/api/v1/submissions", {
-            method: "POST",
-            body: JSON.stringify({ assessment_id: assessmentId }),
-          })
-        }
+        const sub = await req<Submission>(`/api/v1/submissions/${existingSubId}/resume`)
         setSubmission(sub)
+        setShowIntro(false)
       } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : "Failed to start exam"
+        const msg = e instanceof Error ? e.message : "Failed to resume exam"
         toast.error(msg)
         router.back()
       } finally {
         setLoading(false)
       }
     }
-    start()
-  }, [assessmentId, existingSubId, router])
+    resume()
+  }, [existingSubId, router])
+
+  const handleStart = async () => {
+    setStarting(true)
+    try {
+      const sub = await req<Submission>("/api/v1/submissions", {
+        method: "POST",
+        body: JSON.stringify({ assessment_id: assessmentId }),
+      })
+      setSubmission(sub)
+      setShowIntro(false)
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Failed to start exam"
+      toast.error(msg)
+      router.back()
+    } finally {
+      setStarting(false)
+    }
+  }
 
   // Auto-save every 30s
   useEffect(() => {
@@ -402,6 +520,10 @@ export default function ExamPage() {
     return <ResultScreen result={result} onReturn={() => router.push("/student")} />
   }
 
+  if (showIntro && meta) {
+    return <IntroScreen meta={meta} onStart={handleStart} starting={starting} />
+  }
+
   if (!submission) return null
 
   const questions = submission.questions
@@ -423,14 +545,17 @@ export default function ExamPage() {
         {/* Top bar */}
         <div className="fixed top-0 left-0 right-0 h-14 md:h-16 bg-white shadow-sm z-40 flex items-center px-4 md:px-6 gap-3">
           <span className="font-display font-semibold text-sm md:text-base text-ink-primary flex-1 truncate">
-            Exam
+            {meta?.title ?? "Exam"}
           </span>
-          <div className={cn(
-            "font-mono text-base md:text-xl font-bold tabular-nums shrink-0",
-            isNearEnd ? "text-red-500" : "text-ink-primary"
-          )}>
-            {secs !== null ? formatTime(secs) : "--:--:--"}
-          </div>
+          {secs !== null && (
+            <div className={cn(
+              "flex items-center gap-1.5 font-mono text-base md:text-xl font-bold tabular-nums shrink-0",
+              isNearEnd ? "text-red-500" : "text-ink-primary"
+            )}>
+              <Clock className="w-4 h-4 md:w-5 md:h-5" />
+              {formatTime(secs)}
+            </div>
+          )}
           <button
             onClick={() => handleSubmit(false)}
             disabled={submitting}

@@ -55,6 +55,7 @@ def _to_item(assessment: Assessment, question_count: int) -> AssessmentItem:
     return AssessmentItem(
         id=assessment.id,
         title=assessment.title,
+        description=assessment.description,
         class_id=assessment.class_id,
         teacher_id=assessment.teacher_id,
         source_material_id=assessment.source_material_id,
@@ -62,6 +63,7 @@ def _to_item(assessment: Assessment, question_count: int) -> AssessmentItem:
         status=assessment.status,
         start_at=assessment.start_at,
         end_at=assessment.end_at,
+        time_limit_minutes=assessment.time_limit_minutes,
         question_count=question_count,
         created_at=assessment.created_at,
         updated_at=assessment.updated_at,

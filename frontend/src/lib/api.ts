@@ -129,6 +129,7 @@ export interface QuestionItem {
 export interface AssessmentItem {
   id: string
   title: string
+  description: string | null
   class_id: string
   teacher_id: string
   source_material_id: string | null
@@ -136,6 +137,7 @@ export interface AssessmentItem {
   status: AssessmentStatus
   start_at: string | null
   end_at: string | null
+  time_limit_minutes: number | null
   question_count: number
   created_at: string
   updated_at: string
@@ -166,9 +168,11 @@ export interface MaterialItem {
 
 export interface AssessmentCreateData {
   title: string
+  description?: string | null
   class_id: string
   difficulty: DifficultyLevel
   source_material_id?: string
+  time_limit_minutes?: number | null
 }
 
 export interface QuestionUpdateData {
@@ -381,7 +385,7 @@ export const api = {
       body: JSON.stringify(data),
     })
   },
-  publishAssessment(id: string, data: { start_at?: string; end_at?: string }) {
+  publishAssessment(id: string, data: { start_at?: string; end_at?: string; time_limit_minutes?: number | null }) {
     return req<AssessmentItem>(`/api/v1/assessments/${id}/publish`, {
       method: "PUT",
       body: JSON.stringify(data),

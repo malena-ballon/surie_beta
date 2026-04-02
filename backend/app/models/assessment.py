@@ -31,6 +31,8 @@ class Assessment(Base):
         ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
     title: Mapped[str] = mapped_column(String, nullable=False)
+    description: Mapped[str | None] = mapped_column(String, nullable=True)
+    time_limit_minutes: Mapped[int | None] = mapped_column(nullable=True)
     source_material_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("source_materials.id", ondelete="SET NULL"), nullable=True
     )

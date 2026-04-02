@@ -68,25 +68,32 @@ class ReorderRequest(BaseModel):
 
 class AssessmentCreate(BaseModel):
     title: str
+    description: str | None = None
     class_id: uuid.UUID
     difficulty: DifficultyLevel
     source_material_id: uuid.UUID | None = None
+    time_limit_minutes: int | None = None
 
 
 class AssessmentUpdate(BaseModel):
     title: str | None = None
+    description: str | None = None
     difficulty: DifficultyLevel | None = None
     source_material_id: uuid.UUID | None = None
+    class_id: uuid.UUID | None = None
+    time_limit_minutes: int | None = None
 
 
 class PublishRequest(BaseModel):
     start_at: datetime | None = None
     end_at: datetime | None = None
+    time_limit_minutes: int | None = None
 
 
 class AssessmentItem(BaseModel):
     id: uuid.UUID
     title: str
+    description: str | None
     class_id: uuid.UUID
     teacher_id: uuid.UUID
     source_material_id: uuid.UUID | None
@@ -94,6 +101,7 @@ class AssessmentItem(BaseModel):
     status: AssessmentStatus
     start_at: datetime | None
     end_at: datetime | None
+    time_limit_minutes: int | None
     question_count: int
     created_at: datetime
     updated_at: datetime

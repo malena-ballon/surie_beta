@@ -42,7 +42,6 @@ import {
 } from "@/lib/api"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
-import { MasteryBadge } from "@/components/ui/mastery-badge"
 import { cn } from "@/lib/utils"
 
 // ── Design tokens ──────────────────────────────────────────────
@@ -644,7 +643,7 @@ function StudentResponsesTab({ responses }: { responses: AssessmentResponses; })
                   <p className="font-display font-bold text-lg text-ink-primary">{s.total_score ?? "—"}/{s.max_score}</p>
                   <p className="font-body text-[11px] text-ink-tertiary">{pct}%</p>
                 </div>
-                <MasteryBadge status={level} size="sm" showIcon={false} />
+                <MasteryBadge level={level} />
                 {isOpen ? <ChevronUp className="w-4 h-4 text-ink-tertiary" /> : <ChevronDown className="w-4 h-4 text-ink-tertiary" />}
               </div>
             </button>
