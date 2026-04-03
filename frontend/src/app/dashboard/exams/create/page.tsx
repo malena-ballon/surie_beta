@@ -178,10 +178,11 @@ interface Breakdown {
 interface Step1Props {
   classes: ClassItem[]
   existing?: AssessmentItem | null
-  onDone: (result: { assessment: AssessmentItem; questions: QuestionItem[] }) => void
+  hasExistingQuestions: boolean
+  onDone: (result: { assessment: AssessmentItem; questions: QuestionItem[]; breakdown: Record<string, number> }) => void
 }
 
-function Step1({ classes, existing, onDone }: Step1Props) {
+function Step1({ classes, existing, hasExistingQuestions, onDone }: Step1Props) {
   const [title, setTitle] = useState(existing?.title ?? "")
   const [description, setDescription] = useState(existing?.description ?? "")
   const [classId, setClassId] = useState(existing?.class_id ?? "")
@@ -247,9 +248,37 @@ function Step1({ classes, existing, onDone }: Step1Props) {
   const total = Object.values(breakdown).reduce((a, b) => a + b, 0)
   const selectedClass = classes.find((c) => c.id === classId)
 
+  // "View Questions" — save metadata only, navigate to Step 2 without regenerating
+  const handleViewQuestions = async () => {
+    if (!title.trim()) return toast.error("Enter a title")
+    if (!classId) return toast.error("Select a class")
+    if (!existing) return
+
+    setGenerating(true)
+    try {
+      const assessment = await api.updateAssessment(existing.id, {
+        title: title.trim(),
+        description: description.trim() || null,
+        class_id: classId,
+        difficulty,
+      })
+      const detail = await api.getAssessment(existing.id)
+      const activeBreakdown = Object.fromEntries(
+        Object.entries(breakdown).filter(([, v]) => v > 0)
+      )
+      onDone({ assessment, questions: detail.questions, breakdown: activeBreakdown })
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to save")
+    } finally {
+      setGenerating(false)
+    }
+  }
+
+  // "Generate / Regenerate" — always generates new questions (requires material)
   const handleGenerate = async () => {
     if (!title.trim()) return toast.error("Enter a title")
     if (!classId) return toast.error("Select a class")
+    if (!materialId) return toast.error("Upload or select a source material")
     if (total === 0) return toast.error("Add at least one question")
 
     setGenerating(true)
@@ -257,22 +286,13 @@ function Step1({ classes, existing, onDone }: Step1Props) {
       let assessment: AssessmentItem
 
       if (existing) {
-        // Editing existing — update metadata only if changed
         assessment = await api.updateAssessment(existing.id, {
           title: title.trim(),
           description: description.trim() || null,
           class_id: classId,
           difficulty,
         })
-
-        if (!materialId) {
-          // No new material — skip regeneration, go straight to review
-          const detail = await api.getAssessment(existing.id)
-          onDone({ assessment, questions: detail.questions })
-          return
-        }
       } else {
-        if (!materialId) return toast.error("Upload a source material")
         assessment = await api.createAssessment({
           title: title.trim(),
           description: description.trim() || null,
@@ -293,7 +313,7 @@ function Step1({ classes, existing, onDone }: Step1Props) {
         grade_level: selectedClass?.grade_level ?? "",
       })
 
-      onDone({ assessment, questions })
+      onDone({ assessment, questions, breakdown: activeBreakdown })
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Generation failed")
     } finally {
@@ -497,10 +517,23 @@ function Step1({ classes, existing, onDone }: Step1Props) {
           </select>
         </div>
 
-        <Button variant="gradient" size="lg" className="w-full mt-2" onClick={handleGenerate} disabled={generating}>
-          {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-          {existing ? (materialId ? "Regenerate Questions" : "Save & Continue") : "Generate Exam"}
-        </Button>
+        {existing && hasExistingQuestions ? (
+          <div className="flex gap-3 mt-2">
+            <Button variant="secondary" size="lg" className="flex-1" onClick={handleViewQuestions} disabled={generating}>
+              {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+              View Questions
+            </Button>
+            <Button variant="gradient" size="lg" className="flex-1" onClick={handleGenerate} disabled={generating}>
+              {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+              Regenerate
+            </Button>
+          </div>
+        ) : (
+          <Button variant="gradient" size="lg" className="w-full mt-2" onClick={handleGenerate} disabled={generating}>
+            {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+            {existing ? "Generate Questions" : "Generate Exam"}
+          </Button>
+        )}
       </div>
     </>
   )
@@ -913,12 +946,16 @@ function QuestionEditor({
 interface Step2Props {
   assessment: AssessmentItem
   initialQuestions: QuestionItem[]
+  classes: ClassItem[]
+  lastBreakdown: Record<string, number>
   onDone: (questions: QuestionItem[]) => void
 }
 
-function Step2({ assessment, initialQuestions, onDone }: Step2Props) {
+function Step2({ assessment, initialQuestions, classes, lastBreakdown, onDone }: Step2Props) {
   const [questions, setQuestions] = useState<QuestionItem[]>(initialQuestions)
   const [selectedId, setSelectedId] = useState<string | null>(initialQuestions[0]?.id ?? null)
+  const [regenerating, setRegenerating] = useState(false)
+  const [confirmRegen, setConfirmRegen] = useState(false)
   const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
 
   const selectedQuestion = questions.find((q) => q.id === selectedId) ?? null
@@ -946,6 +983,34 @@ function Step2({ assessment, initialQuestions, onDone }: Step2Props) {
       toast.success("Question deleted")
     } catch {
       toast.error("Failed to delete question")
+    }
+  }
+
+  const handleRegenerate = async () => {
+    const cls = classes.find((c) => c.id === assessment.class_id)
+    const breakdown = Object.keys(lastBreakdown).length > 0
+      ? lastBreakdown
+      : Object.fromEntries(
+          Object.entries(
+            questions.reduce((acc, q) => ({ ...acc, [q.question_type]: (acc[q.question_type] ?? 0) + 1 }), {} as Record<string, number>)
+          ).filter(([, v]) => v > 0)
+        )
+
+    setRegenerating(true)
+    setConfirmRegen(false)
+    try {
+      const newQuestions = await api.generateQuestions(assessment.id, {
+        question_breakdown: breakdown,
+        subject: cls?.subject ?? "",
+        grade_level: cls?.grade_level ?? "",
+      })
+      setQuestions(newQuestions)
+      setSelectedId(newQuestions[0]?.id ?? null)
+      toast.success("Questions regenerated")
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Regeneration failed")
+    } finally {
+      setRegenerating(false)
     }
   }
 
@@ -986,6 +1051,30 @@ function Step2({ assessment, initialQuestions, onDone }: Step2Props) {
   }
 
   return (
+    <>
+      {/* Regenerate confirmation banner */}
+      {confirmRegen && (
+        <div className="mb-4 flex items-center justify-between gap-4 px-5 py-3.5 bg-amber-50 border border-amber-200 rounded-[12px]">
+          <p className="text-sm font-body text-amber-800">
+            This will replace all current questions with newly generated ones. Continue?
+          </p>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => setConfirmRegen(false)}
+              className="text-[13px] font-medium font-body text-ink-secondary hover:text-ink-primary transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleRegenerate}
+              className="px-3 py-1.5 rounded-[8px] bg-amber-500 hover:bg-amber-600 text-white text-[13px] font-semibold font-body transition-colors"
+            >
+              Yes, Regenerate
+            </button>
+          </div>
+        </div>
+      )}
+
     <div className="flex flex-col lg:flex-row gap-5 lg:h-[calc(100vh-260px)]">
       {/* Question list — horizontal scroll on mobile, vertical sidebar on desktop */}
       <div className="lg:w-56 shrink-0 bg-white rounded-[14px] border border-border-light shadow-card flex flex-col overflow-hidden">
@@ -996,13 +1085,24 @@ function Step2({ assessment, initialQuestions, onDone }: Step2Props) {
               {questions.length}
             </span>
           </span>
-          <button
-            onClick={handleAddQuestion}
-            className="w-6 h-6 rounded-md flex items-center justify-center text-ink-tertiary hover:text-primary-500 hover:bg-primary-50 transition-colors"
-            title="Add question"
-          >
-            <Plus className="w-3.5 h-3.5" />
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setConfirmRegen(true)}
+              disabled={regenerating}
+              title="Regenerate all questions"
+              className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-semibold font-body text-ink-tertiary hover:text-primary-500 hover:bg-primary-50 transition-colors disabled:opacity-50"
+            >
+              {regenerating ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+              Regen
+            </button>
+            <button
+              onClick={handleAddQuestion}
+              className="w-6 h-6 rounded-md flex items-center justify-center text-ink-tertiary hover:text-primary-500 hover:bg-primary-50 transition-colors"
+              title="Add question"
+            >
+              <Plus className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
         {/* Mobile: horizontal, Desktop: vertical */}
         <div className="flex lg:flex-col overflow-x-auto lg:overflow-y-auto divide-x lg:divide-x-0 lg:divide-y divide-border-light flex-1 min-h-0">
@@ -1063,6 +1163,7 @@ function Step2({ assessment, initialQuestions, onDone }: Step2Props) {
         </div>
       )}
     </div>
+    </>
   )
 }
 
@@ -1263,6 +1364,7 @@ export default function CreateExamPage() {
   const [classes, setClasses] = useState<ClassItem[]>([])
   const [assessment, setAssessment] = useState<AssessmentItem | null>(null)
   const [questions, setQuestions] = useState<QuestionItem[]>([])
+  const [lastBreakdown, setLastBreakdown] = useState<Record<string, number>>({})
 
   useEffect(() => {
     api.getClasses({ per_page: 100 }).then((res) => setClasses(res.items)).catch(() => {})
@@ -1301,9 +1403,11 @@ export default function CreateExamPage() {
         <Step1
           classes={classes}
           existing={assessment}
-          onDone={({ assessment: a, questions: qs }) => {
+          hasExistingQuestions={questions.length > 0}
+          onDone={({ assessment: a, questions: qs, breakdown: bd }) => {
             setAssessment(a)
             setQuestions(qs)
+            setLastBreakdown(bd)
             setStep(1)
           }}
         />
@@ -1314,6 +1418,8 @@ export default function CreateExamPage() {
           <Step2
             assessment={assessment}
             initialQuestions={questions}
+            classes={classes}
+            lastBreakdown={lastBreakdown}
             onDone={(qs) => {
               setQuestions(qs)
               setStep(2)
