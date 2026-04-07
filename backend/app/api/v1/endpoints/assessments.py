@@ -157,7 +157,18 @@ async def get_assessment(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> AssessmentDetail:
-    assessment = await _get_assessment_or_403(assessment_id, db, current_user)
+    # Teachers/admins use the full auth check; students can view published assessments
+    result = await db.execute(select(Assessment).where(Assessment.id == assessment_id))
+    assessment = result.scalar_one_or_none()
+    if not assessment:
+        raise HTTPException(status_code=404, detail="Assessment not found")
+
+    is_teacher_or_admin = (
+        current_user.role == UserRole.admin or assessment.teacher_id == current_user.id
+    )
+    if not is_teacher_or_admin:
+        if assessment.status != AssessmentStatus.published:
+            raise HTTPException(status_code=403, detail="Access denied")
 
     q_result = await db.execute(
         select(Question)
