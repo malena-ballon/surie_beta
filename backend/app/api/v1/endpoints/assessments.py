@@ -7,9 +7,9 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
-from app.core.database import get_db
+from app.core.database import AsyncSessionLocal, get_db
 from app.models import Assessment, AssessmentStatus, Classroom, Question, SourceMaterial, User, UserRole
-from app.models.question import CreatedVia
+from app.models.question import CreatedVia, QuestionType
 from app.schemas.assessments import (
     AssessmentCreate,
     AssessmentDetail,
@@ -326,35 +326,50 @@ async def generate_questions(
         raise HTTPException(status_code=502, detail=f"AI generation failed: {exc}")
 
     # Reopen session to save results
-    from app.core.database import AsyncSessionLocal
-    async with AsyncSessionLocal() as save_db:
-        max_order = await save_db.scalar(
-            select(func.max(Question.display_order)).where(Question.assessment_id == assessment_id)
-        ) or 0
-
-        questions: list[Question] = []
-        for i, q_data in enumerate(generated):
-            q = Question(
-                assessment_id=assessment_id,
-                question_text=q_data["question_text"],
-                question_type=q_data["question_type"],
-                choices=q_data.get("choices"),
-                correct_answer=q_data.get("correct_answer", ""),
-                explanation=q_data.get("explanation"),
-                subtopic_tags=q_data.get("subtopic_tags"),
-                blooms_level=q_data.get("blooms_level"),
-                difficulty=q_data.get("difficulty"),
-                display_order=max_order + i + 1,
-                created_via=CreatedVia.ai,
+    try:
+        async with AsyncSessionLocal() as save_db:
+            # Delete existing AI-generated questions first (regenerate scenario)
+            existing_qs = await save_db.execute(
+                select(Question).where(
+                    Question.assessment_id == assessment_id,
+                    Question.created_via == CreatedVia.ai,
+                )
             )
-            save_db.add(q)
-            questions.append(q)
+            for old_q in existing_qs.scalars().all():
+                await save_db.delete(old_q)
+            await save_db.flush()
 
-        await save_db.commit()
-        for q in questions:
-            await save_db.refresh(q)
+            questions: list[Question] = []
+            for i, q_data in enumerate(generated):
+                q_type = q_data.get("question_type", "identification")
+                # Validate question type — fall back to identification if unknown
+                valid_types = {t.value for t in QuestionType}
+                if q_type not in valid_types:
+                    q_type = "identification"
 
-        return [QuestionItem.model_validate(q) for q in questions]
+                q = Question(
+                    assessment_id=assessment_id,
+                    question_text=q_data["question_text"],
+                    question_type=q_type,
+                    choices=q_data.get("choices"),
+                    correct_answer=q_data.get("correct_answer", ""),
+                    explanation=q_data.get("explanation"),
+                    subtopic_tags=q_data.get("subtopic_tags"),
+                    blooms_level=q_data.get("blooms_level"),
+                    difficulty=q_data.get("difficulty"),
+                    display_order=i + 1,
+                    created_via=CreatedVia.ai,
+                )
+                save_db.add(q)
+                questions.append(q)
+
+            await save_db.commit()
+            for q in questions:
+                await save_db.refresh(q)
+
+            return [QuestionItem.model_validate(q) for q in questions]
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to save generated questions: {exc}")
 
 
 # ── Update question ───────────────────────────────────────────

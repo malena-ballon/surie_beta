@@ -41,6 +41,8 @@ Rules:
 - For mcq: always provide exactly 4 choices labeled A, B, C, D; one must be correct
 - For true_false: correct_answer must be exactly "True" or "False"
 - For identification: correct_answer is the exact term or short phrase
+- For essay: choices must be null; correct_answer must be a model answer or key points (2-4 sentences)
+- For matching: choices must be null; correct_answer must be a JSON array of {{\"term\": \"...\", \"match\": \"...\"}} pairs with 4-6 pairs
 - Output ONLY a valid JSON array — no markdown fences, no explanation text
 
 Question breakdown:
@@ -53,16 +55,17 @@ Difficulty: {difficulty}
 Each question object must have this exact shape:
 {{
   "question_text": "Full question text",
-  "question_type": "mcq" | "true_false" | "identification",
+  "question_type": "mcq" | "true_false" | "identification" | "essay" | "matching",
   "choices": [{{"label": "A", "text": "...", "is_correct": false}}, ...],
-  "correct_answer": "Correct answer text or MCQ label (A/B/C/D)",
-  "explanation": "Why this answer is correct and why the others are not",
-  "subtopic_tags": ["Major Topic Area (e.g. Cell Division, not Prophase stages)"],
+  "correct_answer": "See type-specific rules above",
+  "explanation": "Why this answer is correct",
+  "subtopic_tags": ["Major Topic Area"],
   "blooms_level": "remembering" | "understanding" | "applying" | "analyzing" | "evaluating" | "creating",
   "difficulty": "easy" | "medium" | "hard"
 }}
 
-For non-MCQ types, set choices to null.
+For non-MCQ types (true_false, identification, essay, matching), set choices to null.
+For matching, correct_answer must be a valid JSON string, e.g.: "[{{\"term\":\"Mitosis\",\"match\":\"Cell division for growth\"}},...]"
 
 Source material:
 {source_text[:12000]}"""

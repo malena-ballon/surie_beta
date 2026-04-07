@@ -313,6 +313,7 @@ function Step1({ classes, existing, hasExistingQuestions, onDone }: Step1Props) 
           description: description.trim() || null,
           class_id: classId,
           difficulty,
+          source_material_id: materialId ?? undefined,
         })
       } else {
         assessment = await api.createAssessment({
