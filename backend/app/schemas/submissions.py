@@ -33,8 +33,29 @@ class QuestionForStudent(BaseModel):
     question_type: str
     choices: list | None
     display_order: int
+    match_options: list[str] | None = None  # shuffled right-column values for matching questions
 
     model_config = {"from_attributes": True}
+
+    @classmethod
+    def from_question(cls, q: object) -> "QuestionForStudent":
+        import json, random
+        base = cls.model_validate(q)
+        # For matching questions, derive shuffled options from correct_answer without exposing mapping
+        if base.question_type == "matching":
+            try:
+                pairs = json.loads(q.correct_answer or "[]")  # type: ignore[union-attr]
+                if isinstance(pairs, list):
+                    opts = [p.get("match", "") for p in pairs if p.get("match")]
+                elif isinstance(pairs, dict):
+                    opts = list(pairs.values())
+                else:
+                    opts = []
+                random.shuffle(opts)
+                base.match_options = opts
+            except Exception:
+                base.match_options = []
+        return base
 
 
 class SubmissionItem(BaseModel):

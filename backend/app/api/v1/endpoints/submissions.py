@@ -101,7 +101,7 @@ async def start_exam(
 
     return SubmissionWithQuestions(
         **SubmissionItem.model_validate(submission).model_dump(),
-        questions=[QuestionForStudent.model_validate(q) for q in questions],
+        questions=[QuestionForStudent.from_question(q) for q in questions],
     )
 
 
@@ -237,7 +237,7 @@ async def resume_exam(
 
     return SubmissionWithQuestions(
         **SubmissionItem.model_validate(submission).model_dump(),
-        questions=[QuestionForStudent.model_validate(q) for q in questions],
+        questions=[QuestionForStudent.from_question(q) for q in questions],
     )
 
 

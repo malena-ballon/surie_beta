@@ -94,7 +94,7 @@ export interface ClassCreateData {
 
 export type DifficultyLevel = "easy" | "medium" | "hard"
 export type AssessmentStatus = "draft" | "published" | "closed" | "archived"
-export type QuestionType = "mcq" | "true_false" | "identification" | "essay"
+export type QuestionType = "mcq" | "true_false" | "identification" | "essay" | "matching"
 export type BloomsLevel =
   | "remembering"
   | "understanding"

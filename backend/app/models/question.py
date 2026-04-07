@@ -12,6 +12,7 @@ class QuestionType(str, enum.Enum):
     true_false = "true_false"
     identification = "identification"
     essay = "essay"
+    matching = "matching"
 
 
 class CreatedVia(str, enum.Enum):

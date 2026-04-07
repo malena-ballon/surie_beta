@@ -155,6 +155,7 @@ const TYPE_LABEL: Record<QuestionType, string> = {
   true_false: "T/F",
   identification: "ID",
   essay: "Essay",
+  matching: "Match",
 }
 
 const TYPE_COLOR: Record<QuestionType, string> = {
@@ -162,6 +163,7 @@ const TYPE_COLOR: Record<QuestionType, string> = {
   true_false: "bg-green-50 text-green-700",
   identification: "bg-amber-50 text-amber-700",
   essay: "bg-purple-50 text-purple-700",
+  matching: "bg-rose-50 text-rose-700",
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -173,6 +175,7 @@ interface Breakdown {
   true_false: number
   identification: number
   essay: number
+  matching: number
 }
 
 interface Step1Props {
@@ -192,6 +195,7 @@ function Step1({ classes, existing, hasExistingQuestions, onDone }: Step1Props) 
     true_false: 3,
     identification: 2,
     essay: 0,
+    matching: 0,
   })
 
   // Material state — pre-populate from existing if editing
@@ -200,6 +204,7 @@ function Step1({ classes, existing, hasExistingQuestions, onDone }: Step1Props) 
   const [materialFilename, setMaterialFilename] = useState<string | null>(null)
   const [prevMaterials, setPrevMaterials] = useState<MaterialItem[]>([])
   const [uploading, setUploading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0)
   const [generating, setGenerating] = useState(false)
 
   const dragRef = useRef<HTMLDivElement>(null)
@@ -225,16 +230,33 @@ function Step1({ classes, existing, hasExistingQuestions, onDone }: Step1Props) 
       return
     }
     setUploading(true)
+    setUploadProgress(0)
+
+    // Fake progress: fast start → slows near 90%
+    let prog = 0
+    const ticker = setInterval(() => {
+      prog += prog < 30 ? 7 : prog < 60 ? 4 : prog < 80 ? 1.5 : 0.4
+      if (prog >= 90) clearInterval(ticker)
+      setUploadProgress(Math.min(90, Math.round(prog)))
+    }, 180)
+
     try {
       const mat = await api.uploadMaterial(file)
-      setMaterialId(mat.id)
-      setMaterialFilename(mat.filename)
-      setMaterialPreview(mat.preview)
-      toast.success("Material uploaded")
+      clearInterval(ticker)
+      setUploadProgress(100)
+      setTimeout(() => {
+        setMaterialId(mat.id)
+        setMaterialFilename(mat.filename)
+        setMaterialPreview(mat.preview)
+        setUploading(false)
+        setUploadProgress(0)
+        toast.success("Material uploaded")
+      }, 400)
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Upload failed")
-    } finally {
+      clearInterval(ticker)
       setUploading(false)
+      setUploadProgress(0)
+      toast.error(err instanceof Error ? err.message : "Upload failed")
     }
   }
 
@@ -409,9 +431,17 @@ function Step1({ classes, existing, hasExistingQuestions, onDone }: Step1Props) 
                 onClick={() => document.getElementById("file-input")?.click()}
               >
                 {uploading ? (
-                  <div className="flex flex-col items-center gap-2">
-                    <Loader2 className="w-8 h-8 text-primary-500 animate-spin" />
-                    <p className="text-sm font-body text-ink-secondary">Uploading & extracting text…</p>
+                  <div className="flex flex-col items-center gap-3 w-full px-4">
+                    <p className="text-sm font-body text-ink-secondary">
+                      {uploadProgress < 100 ? "Uploading & extracting text…" : "Processing complete!"}
+                    </p>
+                    <div className="w-full bg-surface-secondary rounded-full h-2 overflow-hidden">
+                      <div
+                        className="h-full bg-primary-500 rounded-full transition-all duration-300"
+                        style={{ width: `${uploadProgress}%` }}
+                      />
+                    </div>
+                    <p className="text-[12px] font-body text-ink-tertiary tabular-nums">{uploadProgress}%</p>
                   </div>
                 ) : (
                   <>
@@ -478,14 +508,14 @@ function Step1({ classes, existing, hasExistingQuestions, onDone }: Step1Props) 
             Question Breakdown
           </label>
           <div className="bg-white border border-border-light rounded-[12px] overflow-hidden divide-y divide-border-light">
-            {(["mcq", "true_false", "identification", "essay"] as const).map((type) => (
+            {(["mcq", "true_false", "identification", "essay", "matching"] as const).map((type) => (
               <div key={type} className="flex items-center justify-between px-4 py-3">
                 <div className="flex items-center gap-3">
                   <span className={cn("px-2 py-0.5 rounded text-[11px] font-semibold", TYPE_COLOR[type])}>
                     {TYPE_LABEL[type]}
                   </span>
                   <span className="text-sm font-body text-ink-primary capitalize">
-                    {type === "mcq" ? "Multiple Choice" : type === "true_false" ? "True / False" : type.replace("_", " ")}
+                    {type === "mcq" ? "Multiple Choice" : type === "true_false" ? "True / False" : type === "matching" ? "Matching" : type.replace("_", " ")}
                   </span>
                 </div>
                 <Stepper
@@ -857,8 +887,67 @@ function QuestionEditor({
         </div>
       )}
 
-      {/* Correct answer (non-MCQ) */}
-      {question.question_type !== "mcq" && (
+      {/* Matching pairs editor */}
+      {question.question_type === "matching" && (() => {
+        let pairs: { term: string; match: string }[] = []
+        try {
+          const parsed = JSON.parse(question.correct_answer || "[]")
+          pairs = Array.isArray(parsed) ? parsed : []
+        } catch { pairs = [] }
+        if (pairs.length === 0) pairs = [{ term: "", match: "" }]
+
+        const updatePairs = (next: typeof pairs) => {
+          onChange({ correct_answer: JSON.stringify(next) })
+        }
+
+        return (
+          <div className="space-y-2">
+            <div className="grid grid-cols-2 gap-2 text-[11px] font-semibold font-body text-ink-tertiary px-1">
+              <span>Term (left column)</span>
+              <span>Match (right column)</span>
+            </div>
+            {pairs.map((p, i) => (
+              <div key={i} className="grid grid-cols-2 gap-2 items-center">
+                <input
+                  value={p.term}
+                  onChange={(e) => {
+                    const next = [...pairs]; next[i] = { ...p, term: e.target.value }; updatePairs(next)
+                  }}
+                  placeholder={`Term ${i + 1}`}
+                  className={cn(inputCls, "h-[38px]")}
+                />
+                <div className="flex gap-1.5">
+                  <input
+                    value={p.match}
+                    onChange={(e) => {
+                      const next = [...pairs]; next[i] = { ...p, match: e.target.value }; updatePairs(next)
+                    }}
+                    placeholder={`Match ${i + 1}`}
+                    className={cn(inputCls, "h-[38px] flex-1")}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => updatePairs(pairs.filter((_, j) => j !== i))}
+                    className="text-ink-tertiary hover:text-danger-500 transition-colors shrink-0"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            ))}
+            <button
+              type="button"
+              onClick={() => updatePairs([...pairs, { term: "", match: "" }])}
+              className="flex items-center gap-1.5 text-[12px] font-medium font-body text-primary-500 hover:text-primary-600 transition-colors"
+            >
+              <Plus className="w-3.5 h-3.5" /> Add Pair
+            </button>
+          </div>
+        )
+      })()}
+
+      {/* Correct answer (non-MCQ, non-matching) */}
+      {question.question_type !== "mcq" && question.question_type !== "matching" && (
         <div className="space-y-1.5">
           <label className="text-[12px] font-medium font-body text-ink-tertiary">Correct Answer</label>
           <input

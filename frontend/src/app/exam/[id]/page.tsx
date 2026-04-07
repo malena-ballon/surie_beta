@@ -39,9 +39,10 @@ interface Choice {
 interface Question {
   id: string
   question_text: string
-  question_type: "mcq" | "true_false" | "identification" | "essay"
+  question_type: "mcq" | "true_false" | "identification" | "essay" | "matching"
   choices: Choice[] | null
   display_order: number
+  match_options: string[] | null
 }
 
 interface AssessmentMeta {
@@ -727,6 +728,44 @@ export default function ExamPage() {
                     </span>
                   </div>
                 )}
+
+                {q.question_type === "matching" && (() => {
+                  const terms = (q.choices ?? []).map((c) => c.text).filter(Boolean)
+                  const options = q.match_options ?? []
+                  let studentAns: Record<string, string> = {}
+                  try { studentAns = JSON.parse(answers[q.id] || "{}") } catch { studentAns = {} }
+
+                  const updateMatch = (term: string, val: string) => {
+                    handleAnswer(q.id, JSON.stringify({ ...studentAns, [term]: val }))
+                  }
+
+                  if (terms.length === 0) return (
+                    <p className="text-sm font-body text-ink-tertiary">No matching pairs defined.</p>
+                  )
+
+                  return (
+                    <div className="space-y-3">
+                      {terms.map((term, i) => (
+                        <div key={i} className="flex items-center gap-3">
+                          <div className="flex-1 px-4 py-3 rounded-xl border border-border-light bg-surface-secondary text-sm font-body text-ink-primary">
+                            {term}
+                          </div>
+                          <span className="text-ink-tertiary font-body text-sm shrink-0">→</span>
+                          <select
+                            value={studentAns[term] ?? ""}
+                            onChange={(e) => updateMatch(term, e.target.value)}
+                            className="flex-1 h-[48px] px-4 text-sm font-body text-ink-primary bg-white border border-border-default rounded-xl focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-colors"
+                          >
+                            <option value="">Select a match…</option>
+                            {options.map((opt) => (
+                              <option key={opt} value={opt}>{opt}</option>
+                            ))}
+                          </select>
+                        </div>
+                      ))}
+                    </div>
+                  )
+                })()}
               </div>
             ) : null}
           </div>

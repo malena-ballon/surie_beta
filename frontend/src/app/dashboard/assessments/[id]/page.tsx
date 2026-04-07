@@ -62,14 +62,6 @@ const BAND_COLORS: Record<string, string> = {
   "90-100": "#42A5F5",
 }
 
-function classify(pct: number): MasteryLevel {
-  if (pct < 40) return "critical"
-  if (pct < 60) return "remedial"
-  if (pct < 75) return "average"
-  if (pct < 90) return "good"
-  return "mastered"
-}
-
 // ── Stat card ──────────────────────────────────────────────────
 
 function StatCard({
@@ -152,32 +144,156 @@ function ScoreDistributionChart({ data }: { data: Record<string, number> }) {
   )
 }
 
-// ── Subtopic mastery heatmap ───────────────────────────────────
+// ── Subtopic mastery analysis ──────────────────────────────────
 
-function SubtopicHeatmap({ data }: { data: Record<string, { pct: number; level: MasteryLevel }> }) {
-  const entries = Object.entries(data).sort((a, b) => a[1].pct - b[1].pct)
-  return (
-    <div className="bg-white rounded-[14px] border border-border-light shadow-card p-5">
-      <h3 className="font-display font-semibold text-base text-ink-primary mb-4">Subtopic Mastery</h3>
-      {entries.length === 0 ? (
+function clusterSubtopics(data: Record<string, { pct: number; level: MasteryLevel }>) {
+  const entries = Object.entries(data)
+  const clusters: Record<string, { subtopics: [string, { pct: number; level: MasteryLevel }][]; avgPct: number }> = {}
+
+  entries.forEach(([name, val]) => {
+    // Use first significant word as cluster key
+    const words = name.split(/[\s,–-]+/).filter(Boolean)
+    let key = words[0] ?? name
+    // If first word is short (≤3 chars) or a common word, use first two words
+    if (key.length <= 3 || ["the","and","of","in","on","at","to","a","an"].includes(key.toLowerCase())) {
+      key = words.slice(0, 2).join(" ")
+    }
+    // Normalize to title case
+    key = key.charAt(0).toUpperCase() + key.slice(1)
+    if (!clusters[key]) clusters[key] = { subtopics: [], avgPct: 0 }
+    clusters[key].subtopics.push([name, val])
+  })
+
+  // If a cluster has only 1 item and it IS the full name, keep the name as-is
+  Object.keys(clusters).forEach((k) => {
+    const c = clusters[k]
+    c.avgPct = Math.round(c.subtopics.reduce((sum, [, v]) => sum + v.pct, 0) / c.subtopics.length)
+  })
+
+  return clusters
+}
+
+function classify(pct: number): { tier: "reteach" | "partial" | "strong"; level: MasteryLevel } {
+  if (pct < 50) return { tier: "reteach", level: pct < 40 ? "critical" : "remedial" }
+  if (pct < 80) return { tier: "partial", level: pct < 65 ? "average" : "good" }
+  return { tier: "strong", level: "mastered" }
+}
+
+const TIER_CONFIG = {
+  reteach: { label: "Needs Reteaching",     bg: "#FFEBEE", border: "#EF5350", text: "#C62828", bar: "#EF5350" },
+  partial: { label: "Partial Understanding", bg: "#FFF8E1", border: "#FFCA28", text: "#8B7500", bar: "#FFCA28" },
+  strong:  { label: "Strong Understanding",  bg: "#E8F5E9", border: "#66BB6A", text: "#2E7D32", bar: "#66BB6A" },
+}
+
+function SubtopicAnalysis({ data }: { data: Record<string, { pct: number; level: MasteryLevel }> }) {
+  const [showFull, setShowFull] = useState(false)
+  const entries = Object.entries(data)
+
+  if (entries.length === 0) {
+    return (
+      <div className="bg-white rounded-[14px] border border-border-light shadow-card p-5">
+        <h3 className="font-display font-semibold text-base text-ink-primary mb-2">Subtopic Analysis</h3>
         <p className="text-sm font-body text-ink-tertiary">No subtopic data available.</p>
-      ) : (
-        <div className="space-y-3">
-          {entries.map(([subtopic, { pct, level }]) => {
+      </div>
+    )
+  }
+
+  const clusters = clusterSubtopics(data)
+  const clusterList = Object.entries(clusters).sort((a, b) => a[1].avgPct - b[1].avgPct)
+
+  const reteach = clusterList.filter(([, c]) => classify(c.avgPct).tier === "reteach")
+  const partial  = clusterList.filter(([, c]) => classify(c.avgPct).tier === "partial")
+  const strong   = clusterList.filter(([, c]) => classify(c.avgPct).tier === "strong")
+
+  // Insight sentence
+  const worstClusters = reteach.slice(0, 2).map(([k]) => k)
+  const insight = worstClusters.length > 0
+    ? `Students struggled most with ${worstClusters.join(" and ")}, with consistently low mastery across related subtopics.`
+    : partial.length > 0
+    ? `Most topics show partial understanding. Focus reteaching on the lowest-performing areas first.`
+    : `Strong overall performance. No critical gaps detected.`
+
+  const suggestedFocus = reteach.length > 0 ? reteach : partial.slice(0, 2)
+
+  return (
+    <div className="bg-white rounded-[14px] border border-border-light shadow-card p-5 space-y-4">
+      <h3 className="font-display font-semibold text-base text-ink-primary">Subtopic Analysis</h3>
+
+      {/* Insight */}
+      <div className="flex items-start gap-2.5 px-3.5 py-3 rounded-[10px] bg-[#F0F4FF] border border-[#C7D7FC]">
+        <Brain className="w-4 h-4 text-primary-500 shrink-0 mt-0.5" />
+        <p className="text-[12px] font-body text-ink-secondary leading-relaxed">{insight}</p>
+      </div>
+
+      {/* Suggested Focus */}
+      {suggestedFocus.length > 0 && (
+        <div>
+          <p className="text-[11px] font-semibold font-body uppercase tracking-wide text-ink-tertiary mb-2">Suggested Focus</p>
+          <div className="flex flex-wrap gap-2">
+            {suggestedFocus.map(([k, c]) => {
+              const cfg = TIER_CONFIG[classify(c.avgPct).tier]
+              return (
+                <span
+                  key={k}
+                  className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[12px] font-semibold font-body"
+                  style={{ backgroundColor: cfg.bg, color: cfg.text, border: `1px solid ${cfg.border}` }}
+                >
+                  {k} · {c.avgPct}%
+                </span>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Three-tier breakdown */}
+      {(["reteach", "partial", "strong"] as const).map((tier) => {
+        const group = tier === "reteach" ? reteach : tier === "partial" ? partial : strong
+        if (group.length === 0) return null
+        const cfg = TIER_CONFIG[tier]
+        return (
+          <div key={tier}>
+            <p className="text-[11px] font-semibold font-body uppercase tracking-wide mb-2" style={{ color: cfg.text }}>
+              {cfg.label}
+            </p>
+            <div className="space-y-2.5">
+              {group.map(([k, c]) => (
+                <div key={k}>
+                  <div className="flex justify-between items-center mb-1">
+                    <span className="font-body text-[13px] text-ink-primary font-medium truncate max-w-[65%]">{k}</span>
+                    <span className="font-display font-semibold text-[13px]" style={{ color: cfg.text }}>{c.avgPct}%</span>
+                  </div>
+                  <div className="h-2 bg-surface-secondary rounded-full overflow-hidden">
+                    <div className="h-full rounded-full transition-all" style={{ width: `${c.avgPct}%`, backgroundColor: cfg.bar }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )
+      })}
+
+      {/* Full breakdown toggle */}
+      <button
+        onClick={() => setShowFull((o) => !o)}
+        className="flex items-center gap-1.5 text-[12px] font-medium font-body text-ink-tertiary hover:text-ink-primary transition-colors"
+      >
+        {showFull ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+        {showFull ? "Hide" : "View"} full breakdown ({entries.length} subtopics)
+      </button>
+
+      {showFull && (
+        <div className="space-y-2.5 border-t border-border-light pt-3">
+          {entries.sort((a, b) => a[1].pct - b[1].pct).map(([name, { pct, level }]) => {
             const c = MASTERY_COLORS[level]
             return (
-              <div key={subtopic}>
+              <div key={name}>
                 <div className="flex justify-between items-center mb-1">
-                  <span className="font-body text-[13px] text-ink-primary truncate max-w-[60%]">{subtopic}</span>
-                  <span className="font-display font-semibold text-[13px]" style={{ color: c.text }}>
-                    {pct}%
-                  </span>
+                  <span className="font-body text-[12px] text-ink-secondary truncate max-w-[65%]">{name}</span>
+                  <span className="font-display font-semibold text-[12px]" style={{ color: c.text }}>{pct}%</span>
                 </div>
-                <div className="h-2 bg-surface-secondary rounded-full overflow-hidden">
-                  <div
-                    className="h-full rounded-full transition-all"
-                    style={{ width: `${pct}%`, backgroundColor: c.bar }}
-                  />
+                <div className="h-1.5 bg-surface-secondary rounded-full overflow-hidden">
+                  <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: c.bar }} />
                 </div>
               </div>
             )
@@ -1003,7 +1119,7 @@ export default function AssessmentDiagnosticPage() {
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
                 <ScoreDistributionChart data={report.score_distribution} />
-                <SubtopicHeatmap data={report.subtopic_mastery} />
+                <SubtopicAnalysis data={report.subtopic_mastery} />
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
