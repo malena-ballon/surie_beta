@@ -144,211 +144,296 @@ function ScoreDistributionChart({ data }: { data: Record<string, number> }) {
   )
 }
 
-// ── Subtopic mastery analysis ──────────────────────────────────
+// ── Mastery heatmap ────────────────────────────────────────────
+// Sorted weakest → strongest left → right. Three colors only.
+// Click a cell to expand its misconception.
 
-function clusterSubtopics(data: Record<string, { pct: number; level: MasteryLevel }>) {
-  const entries = Object.entries(data)
-  const clusters: Record<string, { subtopics: [string, { pct: number; level: MasteryLevel }][]; avgPct: number }> = {}
-
-  entries.forEach(([name, val]) => {
-    // Use first significant word as cluster key
-    const words = name.split(/[\s,–-]+/).filter(Boolean)
-    let key = words[0] ?? name
-    // If first word is short (≤3 chars) or a common word, use first two words
-    if (key.length <= 3 || ["the","and","of","in","on","at","to","a","an"].includes(key.toLowerCase())) {
-      key = words.slice(0, 2).join(" ")
-    }
-    // Normalize to title case
-    key = key.charAt(0).toUpperCase() + key.slice(1)
-    if (!clusters[key]) clusters[key] = { subtopics: [], avgPct: 0 }
-    clusters[key].subtopics.push([name, val])
-  })
-
-  // If a cluster has only 1 item and it IS the full name, keep the name as-is
-  Object.keys(clusters).forEach((k) => {
-    const c = clusters[k]
-    c.avgPct = Math.round(c.subtopics.reduce((sum, [, v]) => sum + v.pct, 0) / c.subtopics.length)
-  })
-
-  return clusters
+function heatmapColor(pct: number) {
+  if (pct < 50) return { bg: "#FFEBEE", border: "#EF5350", text: "#C62828" }
+  if (pct < 80) return { bg: "#FFF8E1", border: "#FFCA28", text: "#8B7500" }
+  return { bg: "#E8F5E9", border: "#66BB6A", text: "#2E7D32" }
 }
 
-function classify(pct: number): { tier: "reteach" | "partial" | "strong"; level: MasteryLevel } {
-  if (pct < 50) return { tier: "reteach", level: pct < 40 ? "critical" : "remedial" }
-  if (pct < 80) return { tier: "partial", level: pct < 65 ? "average" : "good" }
-  return { tier: "strong", level: "mastered" }
-}
+function MasteryHeatmap({
+  data,
+  topics,
+}: {
+  data: Record<string, { pct: number; level: MasteryLevel }>
+  topics: DiagnosticReport["topics_to_reteach"]
+}) {
+  const [activeKey, setActiveKey] = useState<string | null>(null)
 
-const TIER_CONFIG = {
-  reteach: { label: "Needs Reteaching",     bg: "#FFEBEE", border: "#EF5350", text: "#C62828", bar: "#EF5350" },
-  partial: { label: "Partial Understanding", bg: "#FFF8E1", border: "#FFCA28", text: "#8B7500", bar: "#FFCA28" },
-  strong:  { label: "Strong Understanding",  bg: "#E8F5E9", border: "#66BB6A", text: "#2E7D32", bar: "#66BB6A" },
-}
+  const sorted = Object.entries(data).sort((a, b) => a[1].pct - b[1].pct)
+  const misconceptionMap = Object.fromEntries(topics.map((t) => [t.subtopic.toLowerCase(), t.misconception]))
 
-function SubtopicAnalysis({ data }: { data: Record<string, { pct: number; level: MasteryLevel }> }) {
-  const [showFull, setShowFull] = useState(false)
-  const entries = Object.entries(data)
-
-  if (entries.length === 0) {
-    return (
-      <div className="bg-white rounded-[14px] border border-border-light shadow-card p-5">
-        <h3 className="font-display font-semibold text-base text-ink-primary mb-2">Subtopic Analysis</h3>
-        <p className="text-sm font-body text-ink-tertiary">No subtopic data available.</p>
-      </div>
-    )
-  }
-
-  const clusters = clusterSubtopics(data)
-  const clusterList = Object.entries(clusters).sort((a, b) => a[1].avgPct - b[1].avgPct)
-
-  const reteach = clusterList.filter(([, c]) => classify(c.avgPct).tier === "reteach")
-  const partial  = clusterList.filter(([, c]) => classify(c.avgPct).tier === "partial")
-  const strong   = clusterList.filter(([, c]) => classify(c.avgPct).tier === "strong")
-
-  // Insight sentence
-  const worstClusters = reteach.slice(0, 2).map(([k]) => k)
-  const insight = worstClusters.length > 0
-    ? `Students struggled most with ${worstClusters.join(" and ")}, with consistently low mastery across related subtopics.`
-    : partial.length > 0
-    ? `Most topics show partial understanding. Focus reteaching on the lowest-performing areas first.`
-    : `Strong overall performance. No critical gaps detected.`
-
-  const suggestedFocus = reteach.length > 0 ? reteach : partial.slice(0, 2)
+  const active = activeKey ? data[activeKey] : null
+  const activeMisconception = activeKey ? misconceptionMap[activeKey.toLowerCase()] : null
 
   return (
-    <div className="bg-white rounded-[14px] border border-border-light shadow-card p-5 space-y-4">
-      <h3 className="font-display font-semibold text-base text-ink-primary">Subtopic Analysis</h3>
-
-      {/* Insight */}
-      <div className="flex items-start gap-2.5 px-3.5 py-3 rounded-[10px] bg-[#F0F4FF] border border-[#C7D7FC]">
-        <Brain className="w-4 h-4 text-primary-500 shrink-0 mt-0.5" />
-        <p className="text-[12px] font-body text-ink-secondary leading-relaxed">{insight}</p>
+    <div className="bg-white rounded-[14px] border border-border-light shadow-card p-5">
+      <div className="flex items-start justify-between gap-3 mb-3 flex-wrap">
+        <h3 className="font-display font-semibold text-base text-ink-primary">Subtopic Mastery</h3>
+        <div className="flex items-center gap-3 text-[11px] font-body text-ink-tertiary flex-wrap">
+          <span className="flex items-center gap-1">
+            <span className="w-3 h-3 rounded-sm bg-[#EF5350] inline-block" /> &lt;50% · Reteach
+          </span>
+          <span className="flex items-center gap-1">
+            <span className="w-3 h-3 rounded-sm bg-[#FFCA28] inline-block" /> 50–79% · Partial
+          </span>
+          <span className="flex items-center gap-1">
+            <span className="w-3 h-3 rounded-sm bg-[#66BB6A] inline-block" /> 80%+ · Strong
+          </span>
+        </div>
       </div>
 
-      {/* Suggested Focus */}
-      {suggestedFocus.length > 0 && (
-        <div>
-          <p className="text-[11px] font-semibold font-body uppercase tracking-wide text-ink-tertiary mb-2">Suggested Focus</p>
-          <div className="flex flex-wrap gap-2">
-            {suggestedFocus.map(([k, c]) => {
-              const cfg = TIER_CONFIG[classify(c.avgPct).tier]
-              return (
-                <span
-                  key={k}
-                  className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[12px] font-semibold font-body"
-                  style={{ backgroundColor: cfg.bg, color: cfg.text, border: `1px solid ${cfg.border}` }}
-                >
-                  {k} · {c.avgPct}%
-                </span>
-              )
-            })}
+      {/* Heatmap cells — weakest left, strongest right */}
+      <div className="flex gap-1.5 overflow-x-auto pb-2">
+        {sorted.map(([name, { pct }]) => {
+          const c = heatmapColor(pct)
+          const isActive = activeKey === name
+          // Abbreviate to first 2 words for cell label
+          const short = name.split(/[\s,–-]+/).slice(0, 2).join(" ")
+          return (
+            <button
+              key={name}
+              onClick={() => setActiveKey(isActive ? null : name)}
+              className="flex flex-col items-center gap-1 shrink-0 rounded-[8px] border-2 px-2.5 py-2 transition-all min-w-[72px]"
+              style={{
+                backgroundColor: c.bg,
+                borderColor: isActive ? c.border : c.border + "55",
+                boxShadow: isActive ? `0 0 0 3px ${c.border}33` : undefined,
+              }}
+            >
+              <span className="font-display font-bold text-lg leading-none" style={{ color: c.text }}>
+                {pct}%
+              </span>
+              <span
+                className="text-[10px] font-body text-center leading-tight line-clamp-2"
+                style={{ color: c.text + "CC" }}
+              >
+                {short}
+              </span>
+            </button>
+          )
+        })}
+      </div>
+
+      {/* Expanded misconception detail */}
+      {activeKey && active && (
+        <div
+          className="mt-3 px-4 py-3 rounded-[10px] border"
+          style={{
+            backgroundColor: heatmapColor(active.pct).bg,
+            borderColor: heatmapColor(active.pct).border + "55",
+          }}
+        >
+          <div className="flex items-center justify-between mb-1">
+            <span className="font-display font-semibold text-[13px] text-ink-primary">{activeKey}</span>
+            <span
+              className="font-display font-bold text-[13px]"
+              style={{ color: heatmapColor(active.pct).text }}
+            >
+              {active.pct}% class avg
+            </span>
           </div>
-        </div>
-      )}
-
-      {/* Three-tier breakdown */}
-      {(["reteach", "partial", "strong"] as const).map((tier) => {
-        const group = tier === "reteach" ? reteach : tier === "partial" ? partial : strong
-        if (group.length === 0) return null
-        const cfg = TIER_CONFIG[tier]
-        return (
-          <div key={tier}>
-            <p className="text-[11px] font-semibold font-body uppercase tracking-wide mb-2" style={{ color: cfg.text }}>
-              {cfg.label}
-            </p>
-            <div className="space-y-2.5">
-              {group.map(([k, c]) => (
-                <div key={k}>
-                  <div className="flex justify-between items-center mb-1">
-                    <span className="font-body text-[13px] text-ink-primary font-medium truncate max-w-[65%]">{k}</span>
-                    <span className="font-display font-semibold text-[13px]" style={{ color: cfg.text }}>{c.avgPct}%</span>
-                  </div>
-                  <div className="h-2 bg-surface-secondary rounded-full overflow-hidden">
-                    <div className="h-full rounded-full transition-all" style={{ width: `${c.avgPct}%`, backgroundColor: cfg.bar }} />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )
-      })}
-
-      {/* Full breakdown toggle */}
-      <button
-        onClick={() => setShowFull((o) => !o)}
-        className="flex items-center gap-1.5 text-[12px] font-medium font-body text-ink-tertiary hover:text-ink-primary transition-colors"
-      >
-        {showFull ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-        {showFull ? "Hide" : "View"} full breakdown ({entries.length} subtopics)
-      </button>
-
-      {showFull && (
-        <div className="space-y-2.5 border-t border-border-light pt-3">
-          {entries.sort((a, b) => a[1].pct - b[1].pct).map(([name, { pct, level }]) => {
-            const c = MASTERY_COLORS[level]
-            return (
-              <div key={name}>
-                <div className="flex justify-between items-center mb-1">
-                  <span className="font-body text-[12px] text-ink-secondary truncate max-w-[65%]">{name}</span>
-                  <span className="font-display font-semibold text-[12px]" style={{ color: c.text }}>{pct}%</span>
-                </div>
-                <div className="h-1.5 bg-surface-secondary rounded-full overflow-hidden">
-                  <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: c.bar }} />
-                </div>
-              </div>
-            )
-          })}
+          {activeMisconception ? (
+            <p className="text-[12px] font-body text-ink-secondary leading-relaxed">{activeMisconception}</p>
+          ) : (
+            <p className="text-[12px] font-body text-ink-tertiary">No misconception note for this subtopic.</p>
+          )}
         </div>
       )}
     </div>
   )
 }
 
-// ── Topics to reteach ──────────────────────────────────────────
+// ── At-Risk Alerts ─────────────────────────────────────────────
+// Shows only at-risk students with trend label + top weak subtopics + re-assess action.
+
+function AtRiskPanel({
+  students,
+  onReassess,
+}: {
+  students: StudentSummary[]
+  onReassess: (subtopics: string[]) => void
+}) {
+  const atRisk = students.filter((s) => s.at_risk)
+  if (atRisk.length === 0) return null
+
+  return (
+    <div className="bg-white rounded-[14px] border border-[#FFCDD2] shadow-card p-5">
+      <div className="flex items-center gap-2 mb-4">
+        <AlertTriangle className="w-4 h-4 text-danger-500" strokeWidth={2} />
+        <h3 className="font-display font-semibold text-base text-ink-primary">
+          At-Risk Students
+        </h3>
+        <span className="ml-0.5 text-[13px] font-body text-danger-500 font-semibold">
+          · {atRisk.length} flagged
+        </span>
+      </div>
+
+      <div className="space-y-3">
+        {atRisk.map((s) => {
+          // Top 3 weakest subtopics from per-student subtopic scores
+          const weakSubtopics = Object.entries(s.subtopics)
+            .sort((a, b) => a[1] - b[1])
+            .slice(0, 3)
+
+          const trendLabel =
+            s.pct < 40 ? "Critical — well below passing" :
+            s.pct < 60 ? "Below passing threshold" :
+            "Just below class average"
+          const trendColor =
+            s.pct < 40 ? "#C62828" :
+            s.pct < 60 ? "#E65100" :
+            "#8B7500"
+
+          return (
+            <div
+              key={s.student_id}
+              className="flex items-start gap-3 p-3.5 rounded-[10px] border border-[#FFCDD2] bg-[#FFEBEE]/30"
+            >
+              <div className="w-9 h-9 rounded-full bg-[#FFCDD2] flex items-center justify-center shrink-0 mt-0.5">
+                <span className="text-[11px] font-bold text-danger-700 font-display">
+                  {s.name.split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase()}
+                </span>
+              </div>
+
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                  <span className="font-display font-semibold text-[14px] text-ink-primary">{s.name}</span>
+                  <span className="font-body text-[11px] font-semibold" style={{ color: trendColor }}>
+                    {trendLabel}
+                  </span>
+                </div>
+                <p className="font-body text-[12px] text-ink-secondary">
+                  Score: <span className="font-semibold text-ink-primary">{s.score ?? "—"}/{s.max_score} ({s.pct}%)</span>
+                </p>
+                {weakSubtopics.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mt-2 items-center">
+                    <span className="text-[11px] font-body text-ink-tertiary">Weak in:</span>
+                    {weakSubtopics.map(([name, pct]) => (
+                      <span
+                        key={name}
+                        className="text-[11px] font-body font-medium px-2 py-0.5 rounded-full bg-[#FFEBEE] text-danger-700"
+                      >
+                        {name} · {pct}%
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <button
+                onClick={() => onReassess(weakSubtopics.map(([name]) => name))}
+                className="shrink-0 px-3 py-1.5 rounded-[8px] bg-primary-500 hover:bg-primary-600 text-white text-[11px] font-semibold font-body transition-colors"
+              >
+                Re-Assess
+              </button>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+// ── Reteach panel — misconception in teacher language ──────────
 
 function ReteachItem({
   topic,
   questions,
+  responses,
 }: {
   topic: DiagnosticReport["topics_to_reteach"][number]
   questions: QuestionItem[]
+  responses: AssessmentResponses | null
 }) {
   const [open, setOpen] = useState(false)
   const c = MASTERY_COLORS[topic.level]
-  // Questions tagged with this topic
+
   const tagged = questions.filter((q) =>
     q.subtopic_tags?.some((tag) => tag.toLowerCase() === topic.subtopic.toLowerCase())
   )
 
+  // Build a teacher-language distractor sentence from question analysis
+  let distractorSentence: string | null = null
+  if (responses) {
+    for (const q of tagged) {
+      const qa = responses.question_analysis.find((r) => r.question_id === q.id)
+      if (!qa || qa.total_responses === 0) continue
+
+      if (qa.question_type === "mcq" && qa.choices) {
+        const topWrong = Object.entries(qa.answer_distribution)
+          .filter(([ans]) => ans !== qa.correct_answer)
+          .sort((a, b) => b[1] - a[1])[0]
+        if (topWrong && topWrong[1] > 0) {
+          const wrongChoice = qa.choices.find((ch) => ch.label === topWrong[0])
+          if (wrongChoice) {
+            distractorSentence = `Common mistake: Students chose "${wrongChoice.text}" (${topWrong[1]} out of ${qa.total_responses} students).`
+            break
+          }
+        }
+      } else if (qa.question_type === "true_false") {
+        const wrongAns = qa.correct_answer === "True" ? "False" : "True"
+        const wrongCount = qa.answer_distribution[wrongAns] ?? 0
+        if (wrongCount > 0) {
+          distractorSentence = `Common mistake: ${wrongCount} out of ${qa.total_responses} students answered "${wrongAns}" when the answer is "${qa.correct_answer}".`
+          break
+        }
+      }
+    }
+  }
+
+  const explanation = tagged.find((q) => q.explanation)?.explanation
+
   return (
     <div
-      className="rounded-[10px] border-l-4 p-3 pl-4"
-      style={{ borderColor: c.border, backgroundColor: c.bg + "66" }}
+      className="rounded-[10px] border-l-4 p-4 space-y-2"
+      style={{ borderColor: c.border, backgroundColor: c.bg + "55" }}
     >
       <div className="flex items-center justify-between flex-wrap gap-2">
-        <span className="font-display font-semibold text-[13px] text-ink-primary">
-          {topic.subtopic}
-        </span>
-        <span className="font-display font-bold text-sm" style={{ color: c.text }}>
-          {topic.avg_pct}%
-        </span>
+        <span className="font-display font-semibold text-[13px] text-ink-primary">{topic.subtopic}</span>
+        <span className="font-display font-bold text-sm" style={{ color: c.text }}>{topic.avg_pct}% avg</span>
       </div>
-      <p className="font-body text-[12px] text-ink-secondary mt-1.5 leading-relaxed">
-        {topic.misconception}
-      </p>
-      {tagged.length > 0 && (
+
+      {/* Misconception — already written in teacher language by AI */}
+      <p className="font-body text-[13px] text-ink-secondary leading-relaxed">{topic.misconception}</p>
+
+      {/* Distractor count sentence */}
+      {distractorSentence && (
+        <div className="flex items-start gap-2 text-[12px] font-body text-amber-800 bg-amber-50 rounded-[8px] px-3 py-2">
+          <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5 text-amber-500" strokeWidth={2} />
+          <span>{distractorSentence}</span>
+        </div>
+      )}
+
+      {(explanation || tagged.length > 0) && (
         <button
           onClick={() => setOpen((o) => !o)}
-          className="flex items-center gap-1 mt-2 text-[11px] font-medium font-body text-ink-tertiary hover:text-ink-primary transition-colors"
+          className="flex items-center gap-1 text-[11px] font-medium font-body text-ink-tertiary hover:text-ink-primary transition-colors"
         >
           {open ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-          {tagged.length} related question{tagged.length !== 1 ? "s" : ""}
+          {open ? "Hide" : "Show"} explanation
+          {tagged.length > 0 && ` · ${tagged.length} related question${tagged.length !== 1 ? "s" : ""}`}
         </button>
       )}
-      {open && tagged.length > 0 && (
-        <div className="mt-2 space-y-1.5">
+
+      {open && (
+        <div className="space-y-2">
+          {explanation && (
+            <div className="text-[12px] font-body text-ink-secondary bg-white/80 rounded-[8px] px-3 py-2.5 leading-relaxed border border-border-light">
+              <p className="font-semibold text-[10px] text-ink-tertiary uppercase tracking-wide mb-1">
+                Correct Explanation
+              </p>
+              {explanation}
+            </div>
+          )}
           {tagged.map((q, i) => (
-            <div key={q.id} className="text-[11px] font-body text-ink-secondary bg-white/60 rounded-[6px] px-2.5 py-1.5 leading-snug">
+            <div
+              key={q.id}
+              className="text-[11px] font-body text-ink-secondary bg-white/60 rounded-[6px] px-2.5 py-1.5 leading-snug"
+            >
               <span className="font-semibold text-ink-tertiary mr-1">Q{i + 1}.</span>
               {q.question_text}
             </div>
@@ -362,9 +447,11 @@ function ReteachItem({
 function ReteachPanel({
   topics,
   questions,
+  responses,
 }: {
   topics: DiagnosticReport["topics_to_reteach"]
   questions: QuestionItem[]
+  responses: AssessmentResponses | null
 }) {
   if (topics.length === 0) {
     return (
@@ -383,107 +470,158 @@ function ReteachPanel({
       <h3 className="font-display font-semibold text-base text-ink-primary mb-4">Topics to Reteach</h3>
       <div className="space-y-3">
         {topics.map((t) => (
-          <ReteachItem key={t.subtopic} topic={t} questions={questions} />
+          <ReteachItem key={t.subtopic} topic={t} questions={questions} responses={responses} />
         ))}
       </div>
     </div>
   )
 }
 
-// ── Student performance table ──────────────────────────────────
+// ── Student Cluster View ───────────────────────────────────────
+// Default: groups students who share the same weak subtopics.
+// Click to expand a cluster and see individual students.
 
-type SortKey = "name" | "pct" | "status" | "weakest"
+function StudentClusterView({ students }: { students: StudentSummary[] }) {
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
 
-function StudentTable({ students }: { students: StudentSummary[] }) {
-  const [sortKey, setSortKey] = useState<SortKey>("pct")
-  const [sortAsc, setSortAsc] = useState(false)
+  const toggle = (key: string) =>
+    setExpanded((prev) => {
+      const next = new Set(prev)
+      next.has(key) ? next.delete(key) : next.add(key)
+      return next
+    })
 
-  const sorted = [...students].sort((a, b) => {
-    let va: string | number = 0
-    let vb: string | number = 0
-    if (sortKey === "name") { va = a.name; vb = b.name }
-    else if (sortKey === "pct") { va = a.pct; vb = b.pct }
-    else if (sortKey === "status") { va = a.status; vb = b.status }
-    else if (sortKey === "weakest") { va = a.weakest_subtopic ?? ""; vb = b.weakest_subtopic ?? "" }
-    if (va < vb) return sortAsc ? -1 : 1
-    if (va > vb) return sortAsc ? 1 : -1
-    return 0
-  })
-
-  const toggle = (key: SortKey) => {
-    if (sortKey === key) setSortAsc((a) => !a)
-    else { setSortKey(key); setSortAsc(false) }
+  if (students.length === 0) {
+    return (
+      <div className="bg-white rounded-[14px] border border-border-light shadow-card p-5">
+        <h3 className="font-display font-semibold text-base text-ink-primary mb-2">Student Groups by Gap</h3>
+        <p className="font-body text-sm text-ink-tertiary">No student data yet.</p>
+      </div>
+    )
   }
 
-  const SortIcon = ({ k }: { k: SortKey }) =>
-    sortKey === k
-      ? sortAsc
-        ? <ArrowUp className="w-3 h-3 inline ml-0.5" />
-        : <ArrowDown className="w-3 h-3 inline ml-0.5" />
-      : <Minus className="w-3 h-3 inline ml-0.5 opacity-30" />
+  // Group by the sorted set of weak subtopics (pct < 60)
+  const clusters: Record<string, { subtopics: string[]; students: StudentSummary[] }> = {}
+  const noGap: StudentSummary[] = []
+
+  students.forEach((s) => {
+    const weak = Object.entries(s.subtopics)
+      .filter(([, pct]) => pct < 60)
+      .sort((a, b) => a[1] - b[1])
+      .map(([name]) => name)
+
+    if (weak.length === 0) {
+      noGap.push(s)
+      return
+    }
+    const key = weak.join("|")
+    if (!clusters[key]) clusters[key] = { subtopics: weak, students: [] }
+    clusters[key].students.push(s)
+  })
+
+  const clusterList = Object.entries(clusters).sort((a, b) => b[1].students.length - a[1].students.length)
 
   return (
     <div className="bg-white rounded-[14px] border border-border-light shadow-card overflow-hidden">
       <div className="px-5 py-4 border-b border-border-light flex items-center gap-2">
         <Users className="w-4 h-4 text-ink-tertiary" strokeWidth={1.75} />
-        <h3 className="font-display font-semibold text-base text-ink-primary">Student Performance</h3>
+        <h3 className="font-display font-semibold text-base text-ink-primary">Student Groups by Gap</h3>
       </div>
-      <div className="overflow-x-auto">
-        <table className="w-full">
-          <thead>
-            <tr className="bg-surface-secondary border-b border-border-light">
-              {(
-                [
-                  { key: "name" as SortKey, label: "Student" },
-                  { key: "pct" as SortKey, label: "Score" },
-                  { key: "status" as SortKey, label: "Status" },
-                  { key: "weakest" as SortKey, label: "Weakest Area" },
-                ] as { key: SortKey; label: string }[]
-              ).map(({ key, label }) => (
-                <th
-                  key={key}
-                  onClick={() => toggle(key)}
-                  className="px-5 py-3 text-left text-[11px] font-semibold font-body text-ink-tertiary uppercase tracking-wide cursor-pointer hover:text-ink-secondary select-none"
-                >
-                  {label} <SortIcon k={key} />
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border-light">
-            {sorted.map((s) => (
-              <tr
-                key={s.student_id}
-                className={cn(
-                  "hover:bg-surface-secondary/50 transition-colors",
-                  s.at_risk && "bg-[#FFEBEE]/30"
-                )}
+
+      <div className="divide-y divide-border-light">
+        {clusterList.map(([key, cluster]) => {
+          const isOpen = expanded.has(key)
+          return (
+            <div key={key}>
+              <button
+                onClick={() => toggle(key)}
+                className="w-full flex items-start gap-3 px-5 py-4 hover:bg-surface-secondary/50 transition-colors text-left"
               >
-                <td className="px-5 py-3.5">
-                  <div className="flex items-center gap-2">
-                    <span className="font-body text-sm font-medium text-ink-primary">{s.name}</span>
-                    {s.at_risk && (
-                      <AlertTriangle className="w-3.5 h-3.5 text-danger-500 shrink-0" strokeWidth={2} />
+                <div className="w-8 h-8 rounded-full bg-amber-50 flex items-center justify-center shrink-0 mt-0.5">
+                  <span className="font-display font-bold text-[13px] text-amber-700">
+                    {cluster.students.length}
+                  </span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-body text-[13px] text-ink-primary leading-snug">
+                    <span className="font-semibold">
+                      {cluster.students.length} student{cluster.students.length !== 1 ? "s" : ""}
+                    </span>{" "}
+                    share weakness in
+                  </p>
+                  <div className="flex flex-wrap gap-1 mt-1.5">
+                    {cluster.subtopics.slice(0, 4).map((sub) => (
+                      <span
+                        key={sub}
+                        className="text-[11px] font-medium font-body px-2 py-0.5 rounded-full bg-[#FFEBEE] text-danger-700"
+                      >
+                        {sub}
+                      </span>
+                    ))}
+                    {cluster.subtopics.length > 4 && (
+                      <span className="text-[11px] font-body text-ink-tertiary px-1">
+                        +{cluster.subtopics.length - 4} more
+                      </span>
                     )}
                   </div>
-                </td>
-                <td className="px-5 py-3.5">
-                  <span className="font-display font-semibold text-sm text-ink-primary">
-                    {s.score ?? "—"}/{s.max_score} ({s.pct}%)
-                  </span>
-                </td>
-                <td className="px-5 py-3.5">
-                  <MasteryBadge level={s.status} />
-                </td>
-                <td className="px-5 py-3.5">
-                  <span className="font-body text-[12px] text-ink-secondary">
-                    {s.weakest_subtopic ?? "—"}
-                  </span>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                </div>
+                {isOpen
+                  ? <ChevronUp className="w-4 h-4 text-ink-tertiary shrink-0 mt-1" />
+                  : <ChevronDown className="w-4 h-4 text-ink-tertiary shrink-0 mt-1" />
+                }
+              </button>
+
+              {isOpen && (
+                <div className="bg-surface-secondary/40 border-t border-border-light divide-y divide-border-light/60">
+                  {cluster.students.map((s) => (
+                    <div key={s.student_id} className="flex items-center gap-3 px-5 py-3">
+                      <span className="font-body text-[13px] text-ink-primary flex-1">{s.name}</span>
+                      <span className="font-display font-semibold text-[13px] text-ink-secondary">
+                        {s.score ?? "—"}/{s.max_score}
+                      </span>
+                      <MasteryBadge level={s.status} />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )
+        })}
+
+        {noGap.length > 0 && (
+          <div>
+            <button
+              onClick={() => toggle("__no_gap__")}
+              className="w-full flex items-center gap-3 px-5 py-4 hover:bg-surface-secondary/50 transition-colors text-left"
+            >
+              <div className="w-8 h-8 rounded-full bg-green-50 flex items-center justify-center shrink-0">
+                <span className="font-display font-bold text-[13px] text-green-700">{noGap.length}</span>
+              </div>
+              <p className="font-body text-[13px] text-ink-primary flex-1">
+                <span className="font-semibold">{noGap.length} student{noGap.length !== 1 ? "s" : ""}</span>{" "}
+                have no critical gaps
+              </p>
+              {expanded.has("__no_gap__")
+                ? <ChevronUp className="w-4 h-4 text-ink-tertiary" />
+                : <ChevronDown className="w-4 h-4 text-ink-tertiary" />
+              }
+            </button>
+
+            {expanded.has("__no_gap__") && (
+              <div className="bg-green-50/30 border-t border-border-light divide-y divide-border-light/60">
+                {noGap.map((s) => (
+                  <div key={s.student_id} className="flex items-center gap-3 px-5 py-3">
+                    <span className="font-body text-[13px] text-ink-primary flex-1">{s.name}</span>
+                    <span className="font-display font-semibold text-[13px] text-ink-secondary">
+                      {s.score ?? "—"}/{s.max_score}
+                    </span>
+                    <MasteryBadge level={s.status} />
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   )
@@ -503,20 +641,22 @@ function ReassessmentModal({
   assessmentId,
   onClose,
   onSuccess,
+  preselectedSubtopics,
 }: {
   report: DiagnosticReport
   assessmentId: string
   onClose: () => void
   onSuccess: (newId: string) => void
+  preselectedSubtopics?: string[]
 }) {
-  const allSubtopics = Object.entries(report.subtopic_mastery).sort(
-    (a, b) => a[1].pct - b[1].pct
-  )
-  const defaultSelected = allSubtopics
-    .filter(([, d]) => d.pct < 60)
-    .map(([s]) => s)
+  const allSubtopics = Object.entries(report.subtopic_mastery).sort((a, b) => a[1].pct - b[1].pct)
+  const defaultSelected = preselectedSubtopics?.length
+    ? preselectedSubtopics
+    : allSubtopics.filter(([, d]) => d.pct < 60).map(([s]) => s)
 
-  const [selected, setSelected] = useState<Set<string>>(new Set(defaultSelected.length ? defaultSelected : allSubtopics.slice(0, 3).map(([s]) => s)))
+  const [selected, setSelected] = useState<Set<string>>(
+    new Set(defaultSelected.length ? defaultSelected : allSubtopics.slice(0, 3).map(([s]) => s))
+  )
   const [questionCount, setQuestionCount] = useState(10)
   const [difficulty, setDifficulty] = useState<DifficultyLevel>("medium")
   const [subject, setSubject] = useState("")
@@ -540,15 +680,11 @@ function ReassessmentModal({
   const readyPct = report.mastery_rate
   const interventionPct = Math.round(
     (report.student_summaries.filter((s) => s.pct < 60).length /
-      Math.max(1, report.student_summaries.length)) *
-      100
+      Math.max(1, report.student_summaries.length)) * 100
   )
 
   const handleGenerate = async () => {
-    if (selected.size === 0) {
-      toast.error("Select at least one subtopic")
-      return
-    }
+    if (selected.size === 0) { toast.error("Select at least one subtopic"); return }
     setGenerating(true)
     try {
       const result = await api.generateReassessment(assessmentId, {
@@ -572,7 +708,6 @@ function ReassessmentModal({
     <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center sm:p-4">
       <div className="bg-white rounded-t-[20px] sm:rounded-[20px] shadow-2xl w-full sm:max-w-[560px] h-[92vh] sm:h-auto sm:max-h-[90vh] flex flex-col">
 
-        {/* Generating overlay */}
         {generating && (
           <div className="absolute inset-0 bg-white/90 rounded-[20px] z-10 flex flex-col items-center justify-center gap-4">
             <div className="w-14 h-14 rounded-full bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center">
@@ -585,7 +720,6 @@ function ReassessmentModal({
           </div>
         )}
 
-        {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-border-light shrink-0">
           <div className="flex items-center gap-2">
             <Zap className="w-5 h-5 text-primary-500" strokeWidth={1.75} />
@@ -596,10 +730,7 @@ function ReassessmentModal({
           </button>
         </div>
 
-        {/* Body */}
         <div className="overflow-y-auto flex-1 px-6 py-5 space-y-5">
-
-          {/* Class readiness summary */}
           <div className="grid grid-cols-2 gap-3">
             <div className="bg-[#E8F5E9] rounded-[10px] p-3">
               <p className="font-body text-[11px] text-[#2D8A4E] uppercase tracking-wide mb-0.5">Ready for Next Unit</p>
@@ -611,10 +742,10 @@ function ReassessmentModal({
             </div>
           </div>
 
-          {/* Subtopics */}
           <div>
             <p className="font-display font-semibold text-sm text-ink-primary mb-2">
-              Target Subtopics <span className="font-body font-normal text-ink-tertiary text-[12px]">({selected.size} selected)</span>
+              Target Subtopics{" "}
+              <span className="font-body font-normal text-ink-tertiary text-[12px]">({selected.size} selected)</span>
             </p>
             <div className="space-y-2 max-h-[200px] overflow-y-auto pr-1">
               {allSubtopics.map(([subtopic, data]) => {
@@ -652,20 +783,17 @@ function ReassessmentModal({
             </div>
           </div>
 
-          {/* Config */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <label className="text-[13px] font-medium text-ink-secondary font-body">Question Count</label>
-              <div className="flex items-center gap-2">
-                <input
-                  type="number"
-                  min={3}
-                  max={30}
-                  value={questionCount}
-                  onChange={(e) => setQuestionCount(Math.max(3, Math.min(30, Number(e.target.value))))}
-                  className={cn(inputCls, "text-center")}
-                />
-              </div>
+              <input
+                type="number"
+                min={3}
+                max={30}
+                value={questionCount}
+                onChange={(e) => setQuestionCount(Math.max(3, Math.min(30, Number(e.target.value))))}
+                className={cn(inputCls, "text-center")}
+              />
             </div>
             <div className="space-y-1.5">
               <label className="text-[13px] font-medium text-ink-secondary font-body">Difficulty</label>
@@ -700,7 +828,6 @@ function ReassessmentModal({
           </div>
         </div>
 
-        {/* Footer */}
         <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-border-light shrink-0">
           <Button variant="secondary" onClick={onClose} disabled={generating}>Cancel</Button>
           <Button
@@ -708,7 +835,10 @@ function ReassessmentModal({
             onClick={handleGenerate}
             disabled={generating || selected.size === 0}
           >
-            {generating ? <><Loader2 className="w-4 h-4 animate-spin" /> Generating…</> : <><Zap className="w-4 h-4" /> Generate</>}
+            {generating
+              ? <><Loader2 className="w-4 h-4 animate-spin" /> Generating…</>
+              : <><Zap className="w-4 h-4" /> Generate</>
+            }
           </Button>
         </div>
       </div>
@@ -718,7 +848,7 @@ function ReassessmentModal({
 
 // ── Student Responses tab ──────────────────────────────────────
 
-function StudentResponsesTab({ responses }: { responses: AssessmentResponses; }) {
+function StudentResponsesTab({ responses }: { responses: AssessmentResponses }) {
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const questions = responses.question_analysis
 
@@ -740,14 +870,13 @@ function StudentResponsesTab({ responses }: { responses: AssessmentResponses; })
         const isOpen = expandedId === s.student_id
         return (
           <div key={s.student_id} className="bg-white rounded-[14px] border border-border-light shadow-card overflow-hidden">
-            {/* Row header */}
             <button
               onClick={() => setExpandedId(isOpen ? null : s.student_id)}
               className="w-full flex items-center gap-4 px-5 py-4 hover:bg-surface-secondary/50 transition-colors text-left"
             >
               <div className="w-9 h-9 rounded-full bg-brand-gradient flex items-center justify-center shrink-0">
                 <span className="text-[11px] font-bold text-white font-display">
-                  {s.student_name.split(" ").map(n => n[0]).slice(0, 2).join("").toUpperCase()}
+                  {s.student_name.split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase()}
                 </span>
               </div>
               <div className="flex-1 min-w-0">
@@ -764,11 +893,10 @@ function StudentResponsesTab({ responses }: { responses: AssessmentResponses; })
               </div>
             </button>
 
-            {/* Expanded responses */}
             {isOpen && (
               <div className="border-t border-border-light divide-y divide-border-light">
                 {questions.map((q, qi) => {
-                  const resp = s.responses.find(r => r.question_id === q.question_id)
+                  const resp = s.responses.find((r) => r.question_id === q.question_id)
                   const answered = resp?.student_answer ?? "(no answer)"
                   const correct = resp?.is_correct
                   return (
@@ -820,13 +948,10 @@ function QuestionAnalysisTab({ responses }: { responses: AssessmentResponses }) 
       {responses.question_analysis.map((q, qi) => {
         const total = q.total_responses
         const pct = q.correct_pct
-
-        // Sort answers by count descending
         const distEntries = Object.entries(q.answer_distribution).sort((a, b) => b[1] - a[1])
 
         return (
           <div key={q.question_id} className="bg-white rounded-[14px] border border-border-light shadow-card p-5">
-            {/* Header */}
             <div className="flex items-start gap-3 mb-4">
               <span className="shrink-0 w-7 h-7 rounded-full bg-primary-50 flex items-center justify-center text-[12px] font-bold font-display text-primary-600 mt-0.5">
                 {qi + 1}
@@ -845,14 +970,13 @@ function QuestionAnalysisTab({ responses }: { responses: AssessmentResponses }) 
                   )}>
                     {pct}% correct
                   </span>
-                  {q.subtopic_tags?.map(tag => (
+                  {q.subtopic_tags?.map((tag) => (
                     <span key={tag} className="text-[11px] font-body px-2 py-0.5 rounded-full bg-primary-50 text-primary-600">{tag}</span>
                   ))}
                 </div>
               </div>
             </div>
 
-            {/* Answer distribution */}
             {total > 0 && (
               <div className="space-y-2">
                 {distEntries.map(([answer, count]) => {
@@ -882,10 +1006,7 @@ function QuestionAnalysisTab({ responses }: { responses: AssessmentResponses }) 
                         <div className="h-2 bg-surface-secondary rounded-full overflow-hidden">
                           <div
                             className="h-full rounded-full transition-all"
-                            style={{
-                              width: `${barPct}%`,
-                              backgroundColor: isCorrect ? "#4CAF50" : "#9E9E9E",
-                            }}
+                            style={{ width: `${barPct}%`, backgroundColor: isCorrect ? "#4CAF50" : "#9E9E9E" }}
                           />
                         </div>
                       </div>
@@ -895,7 +1016,6 @@ function QuestionAnalysisTab({ responses }: { responses: AssessmentResponses }) 
               </div>
             )}
 
-            {/* Correct answer label for non-MCQ */}
             {q.question_type !== "mcq" && q.question_type !== "true_false" && (
               <p className="mt-3 text-[12px] font-body text-ink-tertiary">
                 Expected answer: <span className="font-semibold text-ink-secondary">{q.correct_answer}</span>
@@ -923,19 +1043,22 @@ export default function AssessmentDiagnosticPage() {
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState(false)
   const [showReassessModal, setShowReassessModal] = useState(false)
+  const [reassessSubtopics, setReassessSubtopics] = useState<string[]>([])
   const [activeTab, setActiveTab] = useState<TabName>("Overview")
   const [responsesLoading, setResponsesLoading] = useState(false)
 
-  // Load assessment + report on mount; auto-generate if no report
   useEffect(() => {
     async function load() {
       try {
         const [a, r] = await Promise.all([api.getAssessment(id), api.getDiagnostics(id)])
         setAssessment(a)
+
+        // Load responses upfront — needed for misconception distractor counts in Overview
+        api.getAssessmentResponses(id).then(setResponses).catch(() => {})
+
         if (r) {
           setReport(r)
         } else {
-          // Auto-generate
           setSyncing(true)
           try {
             const generated = await api.generateDiagnostics(id)
@@ -955,7 +1078,7 @@ export default function AssessmentDiagnosticPage() {
     load()
   }, [id])
 
-  // Lazy-load responses when switching to those tabs
+  // Still lazy-load for tab switches if not yet loaded
   useEffect(() => {
     if ((activeTab === "Student Responses" || activeTab === "Question Analysis") && !responses) {
       setResponsesLoading(true)
@@ -971,17 +1094,19 @@ export default function AssessmentDiagnosticPage() {
     try {
       const r = await api.generateDiagnostics(id)
       setReport(r)
-      // Also refresh responses if loaded
-      if (responses) {
-        const r2 = await api.getAssessmentResponses(id)
-        setResponses(r2)
-      }
+      const r2 = await api.getAssessmentResponses(id)
+      setResponses(r2)
       toast.success("Report synced!")
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Sync failed")
     } finally {
       setSyncing(false)
     }
+  }
+
+  const openReassessFor = (subtopics: string[]) => {
+    setReassessSubtopics(subtopics)
+    setShowReassessModal(true)
   }
 
   if (loading) {
@@ -1040,7 +1165,7 @@ export default function AssessmentDiagnosticPage() {
             <span className="hidden sm:inline">{syncing ? "Syncing…" : "Sync"}</span>
           </Button>
           {report && (
-            <Button variant="gradient" size="sm" onClick={() => setShowReassessModal(true)}>
+            <Button variant="gradient" size="sm" onClick={() => openReassessFor([])}>
               <Zap className="w-4 h-4" />
               <span className="hidden sm:inline">Re-Assess</span>
             </Button>
@@ -1048,7 +1173,6 @@ export default function AssessmentDiagnosticPage() {
         </div>
       </div>
 
-      {/* Syncing / no report */}
       {syncing && !report && (
         <div className="bg-white rounded-[16px] border border-border-light shadow-card flex flex-col items-center justify-center py-16 gap-3">
           <Loader2 className="w-8 h-8 text-primary-500 animate-spin" strokeWidth={1.75} />
@@ -1070,9 +1194,9 @@ export default function AssessmentDiagnosticPage() {
         </div>
       )}
 
-      {/* Tabs */}
       {(report || responses) && (
         <>
+          {/* Tabs */}
           <div className="flex items-center bg-surface-secondary rounded-[10px] p-1 gap-0.5 w-fit">
             {TABS.map((tab) => (
               <button
@@ -1090,9 +1214,11 @@ export default function AssessmentDiagnosticPage() {
             ))}
           </div>
 
-          {/* Overview tab */}
+          {/* ── Overview tab ── */}
           {activeTab === "Overview" && report && (
             <div className="space-y-5">
+
+              {/* Stat cards */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
                 <StatCard
                   label="Average Score"
@@ -1117,16 +1243,29 @@ export default function AssessmentDiagnosticPage() {
                 />
               </div>
 
+              {/* At-risk alerts — full width, prominent */}
+              <AtRiskPanel
+                students={report.student_summaries}
+                onReassess={openReassessFor}
+              />
+
+              {/* Score distribution + Mastery heatmap */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
                 <ScoreDistributionChart data={report.score_distribution} />
-                <SubtopicAnalysis data={report.subtopic_mastery} />
+                <MasteryHeatmap data={report.subtopic_mastery} topics={report.topics_to_reteach} />
               </div>
 
+              {/* Reteach panel + Student cluster view */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-                <ReteachPanel topics={report.topics_to_reteach} questions={assessment.questions} />
-                <StudentTable students={report.student_summaries} />
+                <ReteachPanel
+                  topics={report.topics_to_reteach}
+                  questions={assessment.questions}
+                  responses={responses}
+                />
+                <StudentClusterView students={report.student_summaries} />
               </div>
 
+              {/* Class strengths */}
               {report.class_strengths.length > 0 && (
                 <div className="bg-white rounded-[14px] border border-border-light shadow-card p-5">
                   <h3 className="font-display font-semibold text-base text-ink-primary mb-3">Class Strengths</h3>
@@ -1149,19 +1288,19 @@ export default function AssessmentDiagnosticPage() {
             </div>
           )}
 
-          {/* Student Responses tab */}
+          {/* ── Student Responses tab ── */}
           {activeTab === "Student Responses" && (
             responsesLoading
-              ? <div className="space-y-3">{[0,1,2].map(i => <Skeleton key={i} className="h-16 rounded-[14px]" />)}</div>
+              ? <div className="space-y-3">{[0,1,2].map((i) => <Skeleton key={i} className="h-16 rounded-[14px]" />)}</div>
               : responses
               ? <StudentResponsesTab responses={responses} />
               : null
           )}
 
-          {/* Question Analysis tab */}
+          {/* ── Question Analysis tab ── */}
           {activeTab === "Question Analysis" && (
             responsesLoading
-              ? <div className="space-y-3">{[0,1,2].map(i => <Skeleton key={i} className="h-32 rounded-[14px]" />)}</div>
+              ? <div className="space-y-3">{[0,1,2].map((i) => <Skeleton key={i} className="h-32 rounded-[14px]" />)}</div>
               : responses
               ? <QuestionAnalysisTab responses={responses} />
               : null
@@ -1174,9 +1313,11 @@ export default function AssessmentDiagnosticPage() {
         <ReassessmentModal
           report={report}
           assessmentId={id}
-          onClose={() => setShowReassessModal(false)}
+          preselectedSubtopics={reassessSubtopics}
+          onClose={() => { setShowReassessModal(false); setReassessSubtopics([]) }}
           onSuccess={(newId) => {
             setShowReassessModal(false)
+            setReassessSubtopics([])
             router.push(`/dashboard/exams/create?id=${newId}`)
           }}
         />
