@@ -306,6 +306,41 @@ export interface UserProfile {
   created_at: string
 }
 
+export interface ClassInfo {
+  id: string
+  name: string
+  section: string | null
+}
+
+export interface DashboardReteachAssessment {
+  id: string
+  title: string
+  class_name: string
+  mastery_rate: number
+}
+
+export interface AtRiskStudent {
+  student_id: string
+  name: string
+  section: string
+  mastery_pct: number
+  status: MasteryLevel
+}
+
+export interface ClassPerformanceTrendPoint {
+  label: string
+  date: string
+  mastery: number
+  assessment_id: string
+  title: string
+}
+
+export interface ClassPerformanceTrend {
+  class_id: string
+  class_name: string
+  data: ClassPerformanceTrendPoint[]
+}
+
 export interface DashboardRecentAssessment {
   id: string
   title: string
@@ -318,15 +353,22 @@ export interface DashboardRecentAssessment {
   created_at: string
   avg_score: number | null
   mastery_rate: number | null
+  submitted_count: number
+  total_enrolled: number
 }
 
 export interface DashboardData {
   total_students: number
   total_classes: number
   total_exams: number
+  draft_exams: number
   pending_review: number
   avg_mastery_rate: number | null
+  classes: ClassInfo[]
   recent_assessments: DashboardRecentAssessment[]
+  reteach_assessments: DashboardReteachAssessment[]
+  at_risk_students: AtRiskStudent[]
+  performance_trend: ClassPerformanceTrend[]
 }
 
 // ── API functions ──────────────────────────────────────────────
@@ -534,8 +576,9 @@ export const api = {
   },
 
   // Dashboard
-  getDashboard() {
-    return req<DashboardData>("/api/v1/dashboard")
+  getDashboard(classId?: string) {
+    const qs = classId ? `?class_id=${classId}` : ""
+    return req<DashboardData>(`/api/v1/dashboard${qs}`)
   },
 
   // Profile
