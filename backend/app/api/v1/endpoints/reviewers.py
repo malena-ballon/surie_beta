@@ -106,7 +106,7 @@ async def download_reviewer_pdf(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"PDF generation failed: {e}")
 
-    safe_title = reviewer.title.replace(" ", "_")[:60]
+    safe_title = reviewer.title.encode("ascii", "ignore").decode().replace(" ", "_").strip("_")[:60] or "reviewer"
     filename = f"{safe_title}.pdf"
 
     return Response(
