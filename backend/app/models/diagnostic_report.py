@@ -23,6 +23,7 @@ class DiagnosticReport(Base):
     topics_to_reteach: Mapped[list] = mapped_column(JSON, nullable=False)
     class_strengths: Mapped[list] = mapped_column(JSON, nullable=False)
     student_summaries: Mapped[list] = mapped_column(JSON, nullable=False, server_default="[]")
+    topic_groups: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     generated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

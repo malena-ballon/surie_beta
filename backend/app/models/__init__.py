@@ -11,6 +11,7 @@ from app.models.response import Response, GradedBy
 from app.models.diagnostic_report import DiagnosticReport
 from app.models.student_mastery import StudentMastery, TrendType
 from app.models.reassessment import ReAssessment, ReAssessmentType
+from app.models.topic_taxonomy import TopicTaxonomy
 
 __all__ = [
     "Base",
@@ -26,4 +27,5 @@ __all__ = [
     "DiagnosticReport",
     "StudentMastery", "TrendType",
     "ReAssessment", "ReAssessmentType",
+    "TopicTaxonomy",
 ]

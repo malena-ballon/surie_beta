@@ -221,6 +221,12 @@ export interface StudentSummary {
   subtopics: Record<string, number>
 }
 
+export interface TopicGroupDetail {
+  avg_pct: number
+  level: MasteryLevel
+  subtopics: Record<string, SubtopicMastery>
+}
+
 export interface DiagnosticReport {
   id: string
   assessment_id: string
@@ -232,6 +238,7 @@ export interface DiagnosticReport {
   topics_to_reteach: TopicToReteach[]
   class_strengths: { subtopic: string; avg_pct: number }[]
   student_summaries: StudentSummary[]
+  topic_groups: Record<string, TopicGroupDetail>
   generated_at: string
 }
 

@@ -39,6 +39,7 @@ import {
   type QuestionItem,
   type StudentSummary,
   type DifficultyLevel,
+  type TopicGroupDetail,
 } from "@/lib/api"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -144,9 +145,10 @@ function ScoreDistributionChart({ data }: { data: Record<string, number> }) {
   )
 }
 
-// ── Mastery heatmap ────────────────────────────────────────────
-// Sorted weakest → strongest left → right. Three colors only.
-// Click a cell to expand its misconception.
+// ── Mastery heatmap — two-level hierarchy ─────────────────────
+// Default: one card per parent topic (weakest→strongest).
+// Expand a parent to reveal granular subtopic cells.
+// Falls back to flat rendering if topicGroups is empty.
 
 function heatmapColor(pct: number) {
   if (pct < 50) return { bg: "#FFEBEE", border: "#EF5350", text: "#C62828" }
@@ -154,95 +156,173 @@ function heatmapColor(pct: number) {
   return { bg: "#E8F5E9", border: "#66BB6A", text: "#2E7D32" }
 }
 
+function SubtopicCell({
+  name,
+  pct,
+  isActive,
+  onClick,
+}: {
+  name: string
+  pct: number
+  isActive: boolean
+  onClick: () => void
+}) {
+  const c = heatmapColor(pct)
+  const short = name.split(/[\s,–-]+/).slice(0, 2).join(" ")
+  return (
+    <button
+      onClick={onClick}
+      className="flex flex-col items-center gap-1 shrink-0 rounded-[8px] border-2 px-2.5 py-2 transition-all min-w-[72px]"
+      style={{
+        backgroundColor: c.bg,
+        borderColor: isActive ? c.border : c.border + "55",
+        boxShadow: isActive ? `0 0 0 3px ${c.border}33` : undefined,
+      }}
+    >
+      <span className="font-display font-bold text-lg leading-none" style={{ color: c.text }}>
+        {pct}%
+      </span>
+      <span className="text-[10px] font-body text-center leading-tight line-clamp-2" style={{ color: c.text + "CC" }}>
+        {short}
+      </span>
+    </button>
+  )
+}
+
 function MasteryHeatmap({
   data,
   topics,
+  topicGroups,
 }: {
   data: Record<string, { pct: number; level: MasteryLevel }>
   topics: DiagnosticReport["topics_to_reteach"]
+  topicGroups: Record<string, TopicGroupDetail>
 }) {
-  const [activeKey, setActiveKey] = useState<string | null>(null)
+  const [expandedParents, setExpandedParents] = useState<Set<string>>(new Set())
+  const [activeSubtopic, setActiveSubtopic] = useState<string | null>(null)
 
-  const sorted = Object.entries(data).sort((a, b) => a[1].pct - b[1].pct)
   const misconceptionMap = Object.fromEntries(topics.map((t) => [t.subtopic.toLowerCase(), t.misconception]))
 
-  const active = activeKey ? data[activeKey] : null
-  const activeMisconception = activeKey ? misconceptionMap[activeKey.toLowerCase()] : null
+  const toggleParent = (parent: string) => {
+    setExpandedParents((prev) => {
+      const next = new Set(prev)
+      next.has(parent) ? next.delete(parent) : next.add(parent)
+      return next
+    })
+    setActiveSubtopic(null)
+  }
+
+  const useGroups = Object.keys(topicGroups).length > 0
+  const legend = (
+    <div className="flex items-center gap-3 text-[11px] font-body text-ink-tertiary flex-wrap">
+      <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-[#EF5350] inline-block" /> &lt;50% · Reteach</span>
+      <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-[#FFCA28] inline-block" /> 50–79% · Partial</span>
+      <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-[#66BB6A] inline-block" /> 80%+ · Strong</span>
+    </div>
+  )
+
+  if (!useGroups) {
+    // ── Flat fallback (no topic groups) ──
+    const sorted = Object.entries(data).sort((a, b) => a[1].pct - b[1].pct)
+    return (
+      <div className="bg-white rounded-[14px] border border-border-light shadow-card p-5">
+        <div className="flex items-start justify-between gap-3 mb-3 flex-wrap">
+          <h3 className="font-display font-semibold text-base text-ink-primary">Subtopic Mastery</h3>
+          {legend}
+        </div>
+        <div className="flex gap-1.5 overflow-x-auto pb-2">
+          {sorted.map(([name, { pct }]) => (
+            <SubtopicCell
+              key={name}
+              name={name}
+              pct={pct}
+              isActive={activeSubtopic === name}
+              onClick={() => setActiveSubtopic(activeSubtopic === name ? null : name)}
+            />
+          ))}
+        </div>
+        {activeSubtopic && data[activeSubtopic] && (
+          <div className="mt-3 px-4 py-3 rounded-[10px] border" style={{ backgroundColor: heatmapColor(data[activeSubtopic].pct).bg, borderColor: heatmapColor(data[activeSubtopic].pct).border + "55" }}>
+            <div className="flex items-center justify-between mb-1">
+              <span className="font-display font-semibold text-[13px] text-ink-primary">{activeSubtopic}</span>
+              <span className="font-display font-bold text-[13px]" style={{ color: heatmapColor(data[activeSubtopic].pct).text }}>{data[activeSubtopic].pct}% class avg</span>
+            </div>
+            {misconceptionMap[activeSubtopic.toLowerCase()]
+              ? <p className="text-[12px] font-body text-ink-secondary leading-relaxed">{misconceptionMap[activeSubtopic.toLowerCase()]}</p>
+              : <p className="text-[12px] font-body text-ink-tertiary">No misconception note for this subtopic.</p>}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // ── Two-level grouped view ──
+  const sortedParents = Object.entries(topicGroups).sort((a, b) => a[1].avg_pct - b[1].avg_pct)
 
   return (
     <div className="bg-white rounded-[14px] border border-border-light shadow-card p-5">
       <div className="flex items-start justify-between gap-3 mb-3 flex-wrap">
         <h3 className="font-display font-semibold text-base text-ink-primary">Subtopic Mastery</h3>
-        <div className="flex items-center gap-3 text-[11px] font-body text-ink-tertiary flex-wrap">
-          <span className="flex items-center gap-1">
-            <span className="w-3 h-3 rounded-sm bg-[#EF5350] inline-block" /> &lt;50% · Reteach
-          </span>
-          <span className="flex items-center gap-1">
-            <span className="w-3 h-3 rounded-sm bg-[#FFCA28] inline-block" /> 50–79% · Partial
-          </span>
-          <span className="flex items-center gap-1">
-            <span className="w-3 h-3 rounded-sm bg-[#66BB6A] inline-block" /> 80%+ · Strong
-          </span>
-        </div>
+        {legend}
       </div>
 
-      {/* Heatmap cells — weakest left, strongest right */}
-      <div className="flex gap-1.5 overflow-x-auto pb-2">
-        {sorted.map(([name, { pct }]) => {
-          const c = heatmapColor(pct)
-          const isActive = activeKey === name
-          // Abbreviate to first 2 words for cell label
-          const short = name.split(/[\s,–-]+/).slice(0, 2).join(" ")
+      <div className="space-y-2">
+        {sortedParents.map(([parent, group]) => {
+          const c = heatmapColor(group.avg_pct)
+          const isExpanded = expandedParents.has(parent)
+          const sortedChildren = Object.entries(group.subtopics).sort((a, b) => a[1].pct - b[1].pct)
+
           return (
-            <button
-              key={name}
-              onClick={() => setActiveKey(isActive ? null : name)}
-              className="flex flex-col items-center gap-1 shrink-0 rounded-[8px] border-2 px-2.5 py-2 transition-all min-w-[72px]"
-              style={{
-                backgroundColor: c.bg,
-                borderColor: isActive ? c.border : c.border + "55",
-                boxShadow: isActive ? `0 0 0 3px ${c.border}33` : undefined,
-              }}
-            >
-              <span className="font-display font-bold text-lg leading-none" style={{ color: c.text }}>
-                {pct}%
-              </span>
-              <span
-                className="text-[10px] font-body text-center leading-tight line-clamp-2"
-                style={{ color: c.text + "CC" }}
+            <div key={parent} className="rounded-[10px] border-2 overflow-hidden transition-all" style={{ borderColor: isExpanded ? c.border : c.border + "44" }}>
+              {/* Parent topic row */}
+              <button
+                onClick={() => toggleParent(parent)}
+                className="w-full flex items-center gap-3 px-3.5 py-2.5 transition-colors text-left"
+                style={{ backgroundColor: c.bg }}
               >
-                {short}
-              </span>
-            </button>
+                <span className="font-display font-bold text-xl leading-none w-14 shrink-0" style={{ color: c.text }}>
+                  {group.avg_pct}%
+                </span>
+                <span className="font-display font-semibold text-[13px] flex-1 text-ink-primary">{parent}</span>
+                <span className="text-[11px] font-body text-ink-tertiary shrink-0">{sortedChildren.length} subtopic{sortedChildren.length !== 1 ? "s" : ""}</span>
+                {isExpanded
+                  ? <ChevronUp className="w-4 h-4 shrink-0" style={{ color: c.text }} />
+                  : <ChevronDown className="w-4 h-4 shrink-0" style={{ color: c.text }} />
+                }
+              </button>
+
+              {/* Expanded: child subtopic cells */}
+              {isExpanded && (
+                <div className="px-3.5 pb-3 pt-2 border-t" style={{ borderColor: c.border + "33", backgroundColor: c.bg + "55" }}>
+                  <div className="flex gap-1.5 overflow-x-auto pb-1">
+                    {sortedChildren.map(([name, { pct }]) => (
+                      <SubtopicCell
+                        key={name}
+                        name={name}
+                        pct={pct}
+                        isActive={activeSubtopic === name}
+                        onClick={() => setActiveSubtopic(activeSubtopic === name ? null : name)}
+                      />
+                    ))}
+                  </div>
+                  {/* Misconception detail for active subtopic within this parent */}
+                  {activeSubtopic && group.subtopics[activeSubtopic] && (
+                    <div className="mt-2 px-3.5 py-2.5 rounded-[8px] border bg-white" style={{ borderColor: heatmapColor(group.subtopics[activeSubtopic].pct).border + "55" }}>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="font-display font-semibold text-[12px] text-ink-primary">{activeSubtopic}</span>
+                        <span className="font-display font-bold text-[12px]" style={{ color: heatmapColor(group.subtopics[activeSubtopic].pct).text }}>{group.subtopics[activeSubtopic].pct}% avg</span>
+                      </div>
+                      {misconceptionMap[activeSubtopic.toLowerCase()]
+                        ? <p className="text-[12px] font-body text-ink-secondary leading-relaxed">{misconceptionMap[activeSubtopic.toLowerCase()]}</p>
+                        : <p className="text-[12px] font-body text-ink-tertiary">No misconception note for this subtopic.</p>}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           )
         })}
       </div>
-
-      {/* Expanded misconception detail */}
-      {activeKey && active && (
-        <div
-          className="mt-3 px-4 py-3 rounded-[10px] border"
-          style={{
-            backgroundColor: heatmapColor(active.pct).bg,
-            borderColor: heatmapColor(active.pct).border + "55",
-          }}
-        >
-          <div className="flex items-center justify-between mb-1">
-            <span className="font-display font-semibold text-[13px] text-ink-primary">{activeKey}</span>
-            <span
-              className="font-display font-bold text-[13px]"
-              style={{ color: heatmapColor(active.pct).text }}
-            >
-              {active.pct}% class avg
-            </span>
-          </div>
-          {activeMisconception ? (
-            <p className="text-[12px] font-body text-ink-secondary leading-relaxed">{activeMisconception}</p>
-          ) : (
-            <p className="text-[12px] font-body text-ink-tertiary">No misconception note for this subtopic.</p>
-          )}
-        </div>
-      )}
     </div>
   )
 }
@@ -250,23 +330,46 @@ function MasteryHeatmap({
 // ── At-Risk Alerts ─────────────────────────────────────────────
 // Shows only at-risk students with trend label + top weak subtopics + re-assess action.
 
+// Returns the parent topic name for a subtopic, or the subtopic itself as fallback
+function parentOf(subtopic: string, topicGroups: Record<string, TopicGroupDetail>): string {
+  for (const [parent, group] of Object.entries(topicGroups)) {
+    if (Object.keys(group.subtopics).includes(subtopic)) return parent
+  }
+  return subtopic
+}
+
+// Deduplicates while preserving order
+function dedupe<T>(arr: T[]): T[] {
+  return arr.filter((v, i, a) => a.indexOf(v) === i)
+}
+
 function AtRiskPanel({
   students,
   onReassess,
+  topicGroups,
 }: {
   students: StudentSummary[]
   onReassess: (subtopics: string[]) => void
+  topicGroups: Record<string, TopicGroupDetail>
 }) {
+  const [expandedStudents, setExpandedStudents] = useState<Set<string>>(new Set())
   const atRisk = students.filter((s) => s.at_risk)
   if (atRisk.length === 0) return null
+
+  const useGroups = Object.keys(topicGroups).length > 0
+
+  const toggleStudent = (id: string) =>
+    setExpandedStudents((prev) => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
 
   return (
     <div className="bg-white rounded-[14px] border border-[#FFCDD2] shadow-card p-5">
       <div className="flex items-center gap-2 mb-4">
         <AlertTriangle className="w-4 h-4 text-danger-500" strokeWidth={2} />
-        <h3 className="font-display font-semibold text-base text-ink-primary">
-          At-Risk Students
-        </h3>
+        <h3 className="font-display font-semibold text-base text-ink-primary">At-Risk Students</h3>
         <span className="ml-0.5 text-[13px] font-body text-danger-500 font-semibold">
           · {atRisk.length} flagged
         </span>
@@ -274,62 +377,79 @@ function AtRiskPanel({
 
       <div className="space-y-3">
         {atRisk.map((s) => {
-          // Top 3 weakest subtopics from per-student subtopic scores
           const weakSubtopics = Object.entries(s.subtopics)
             .sort((a, b) => a[1] - b[1])
-            .slice(0, 3)
+            .slice(0, 5)
+
+          // Show parent topic labels when groups are available; fall back to subtopic names
+          const weakLabels = useGroups
+            ? dedupe(weakSubtopics.map(([name]) => parentOf(name, topicGroups))).slice(0, 3)
+            : weakSubtopics.slice(0, 3).map(([name]) => name)
 
           const trendLabel =
             s.pct < 40 ? "Critical — well below passing" :
             s.pct < 60 ? "Below passing threshold" :
             "Just below class average"
           const trendColor =
-            s.pct < 40 ? "#C62828" :
-            s.pct < 60 ? "#E65100" :
-            "#8B7500"
+            s.pct < 40 ? "#C62828" : s.pct < 60 ? "#E65100" : "#8B7500"
+
+          const isExpanded = expandedStudents.has(s.student_id)
 
           return (
-            <div
-              key={s.student_id}
-              className="flex items-start gap-3 p-3.5 rounded-[10px] border border-[#FFCDD2] bg-[#FFEBEE]/30"
-            >
-              <div className="w-9 h-9 rounded-full bg-[#FFCDD2] flex items-center justify-center shrink-0 mt-0.5">
-                <span className="text-[11px] font-bold text-danger-700 font-display">
-                  {s.name.split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase()}
-                </span>
-              </div>
-
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap mb-0.5">
-                  <span className="font-display font-semibold text-[14px] text-ink-primary">{s.name}</span>
-                  <span className="font-body text-[11px] font-semibold" style={{ color: trendColor }}>
-                    {trendLabel}
+            <div key={s.student_id} className="rounded-[10px] border border-[#FFCDD2] bg-[#FFEBEE]/30 overflow-hidden">
+              <div className="flex items-start gap-3 p-3.5">
+                <div className="w-9 h-9 rounded-full bg-[#FFCDD2] flex items-center justify-center shrink-0 mt-0.5">
+                  <span className="text-[11px] font-bold text-danger-700 font-display">
+                    {s.name.split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase()}
                   </span>
                 </div>
-                <p className="font-body text-[12px] text-ink-secondary">
-                  Score: <span className="font-semibold text-ink-primary">{s.score ?? "—"}/{s.max_score} ({s.pct}%)</span>
-                </p>
-                {weakSubtopics.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 mt-2 items-center">
-                    <span className="text-[11px] font-body text-ink-tertiary">Weak in:</span>
-                    {weakSubtopics.map(([name, pct]) => (
-                      <span
-                        key={name}
-                        className="text-[11px] font-body font-medium px-2 py-0.5 rounded-full bg-[#FFEBEE] text-danger-700"
-                      >
-                        {name} · {pct}%
-                      </span>
-                    ))}
+
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                    <span className="font-display font-semibold text-[14px] text-ink-primary">{s.name}</span>
+                    <span className="font-body text-[11px] font-semibold" style={{ color: trendColor }}>{trendLabel}</span>
                   </div>
-                )}
+                  <p className="font-body text-[12px] text-ink-secondary">
+                    Score: <span className="font-semibold text-ink-primary">{s.score ?? "—"}/{s.max_score} ({s.pct}%)</span>
+                  </p>
+                  {weakLabels.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mt-2 items-center">
+                      <span className="text-[11px] font-body text-ink-tertiary">Weak in:</span>
+                      {weakLabels.map((label) => (
+                        <span key={label} className="text-[11px] font-body font-medium px-2 py-0.5 rounded-full bg-[#FFEBEE] text-danger-700">
+                          {label}
+                        </span>
+                      ))}
+                      {useGroups && weakSubtopics.length > 0 && (
+                        <button
+                          onClick={() => toggleStudent(s.student_id)}
+                          className="text-[11px] font-body text-ink-tertiary hover:text-ink-primary transition-colors"
+                        >
+                          {isExpanded ? "hide detail" : "see subtopics"}
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <button
+                  onClick={() => onReassess(weakSubtopics.map(([name]) => name))}
+                  className="shrink-0 px-3 py-1.5 rounded-[8px] bg-primary-500 hover:bg-primary-600 text-white text-[11px] font-semibold font-body transition-colors"
+                >
+                  Re-Assess
+                </button>
               </div>
 
-              <button
-                onClick={() => onReassess(weakSubtopics.map(([name]) => name))}
-                className="shrink-0 px-3 py-1.5 rounded-[8px] bg-primary-500 hover:bg-primary-600 text-white text-[11px] font-semibold font-body transition-colors"
-              >
-                Re-Assess
-              </button>
+              {/* Granular subtopic detail (expanded) */}
+              {isExpanded && weakSubtopics.length > 0 && (
+                <div className="border-t border-[#FFCDD2]/50 px-3.5 pb-3 pt-2 flex flex-wrap gap-1.5">
+                  {weakSubtopics.map(([name, pct]) => (
+                    <span key={name} className="text-[11px] font-body px-2 py-0.5 rounded-full bg-white border border-[#FFCDD2] text-danger-700">
+                      {name} · {pct}%
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
           )
         })}
@@ -448,11 +568,15 @@ function ReteachPanel({
   topics,
   questions,
   responses,
+  topicGroups,
 }: {
   topics: DiagnosticReport["topics_to_reteach"]
   questions: QuestionItem[]
   responses: AssessmentResponses | null
+  topicGroups: Record<string, TopicGroupDetail>
 }) {
+  const [expandedParents, setExpandedParents] = useState<Set<string>>(new Set())
+
   if (topics.length === 0) {
     return (
       <div className="bg-white rounded-[14px] border border-border-light shadow-card p-5">
@@ -465,13 +589,76 @@ function ReteachPanel({
     )
   }
 
+  const useGroups = Object.keys(topicGroups).length > 0
+
+  if (!useGroups) {
+    // Flat fallback
+    return (
+      <div className="bg-white rounded-[14px] border border-border-light shadow-card p-5">
+        <h3 className="font-display font-semibold text-base text-ink-primary mb-4">Topics to Reteach</h3>
+        <div className="space-y-3">
+          {topics.map((t) => (
+            <ReteachItem key={t.subtopic} topic={t} questions={questions} responses={responses} />
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  // Group reteach items by parent topic
+  const grouped: Record<string, DiagnosticReport["topics_to_reteach"]> = {}
+  for (const topic of topics) {
+    const parent = parentOf(topic.subtopic, topicGroups)
+    if (!grouped[parent]) grouped[parent] = []
+    grouped[parent].push(topic)
+  }
+
+  // Sort parents by their min avg_pct (worst first)
+  const sortedParents = Object.entries(grouped).sort(
+    (a, b) => Math.min(...a[1].map((t) => t.avg_pct)) - Math.min(...b[1].map((t) => t.avg_pct))
+  )
+
+  const toggleParent = (parent: string) =>
+    setExpandedParents((prev) => {
+      const next = new Set(prev)
+      next.has(parent) ? next.delete(parent) : next.add(parent)
+      return next
+    })
+
   return (
     <div className="bg-white rounded-[14px] border border-border-light shadow-card p-5">
       <h3 className="font-display font-semibold text-base text-ink-primary mb-4">Topics to Reteach</h3>
-      <div className="space-y-3">
-        {topics.map((t) => (
-          <ReteachItem key={t.subtopic} topic={t} questions={questions} responses={responses} />
-        ))}
+      <div className="space-y-2">
+        {sortedParents.map(([parent, parentTopics]) => {
+          const avgPct = Math.round(parentTopics.reduce((sum, t) => sum + t.avg_pct, 0) / parentTopics.length)
+          const c = MASTERY_COLORS[parentTopics[0].level] // use worst item's color
+          const isExpanded = expandedParents.has(parent)
+
+          return (
+            <div key={parent} className="rounded-[10px] border overflow-hidden" style={{ borderColor: c.border + "55" }}>
+              <button
+                onClick={() => toggleParent(parent)}
+                className="w-full flex items-center gap-3 px-4 py-3 text-left transition-colors hover:opacity-90"
+                style={{ backgroundColor: c.bg + "55" }}
+              >
+                <span className="font-display font-bold text-[15px] flex-1 text-ink-primary">{parent}</span>
+                <span className="font-display font-semibold text-[13px]" style={{ color: c.text }}>{avgPct}% avg</span>
+                <span className="text-[11px] font-body text-ink-tertiary">{parentTopics.length} subtopic{parentTopics.length !== 1 ? "s" : ""}</span>
+                {isExpanded
+                  ? <ChevronUp className="w-4 h-4 shrink-0 text-ink-tertiary" />
+                  : <ChevronDown className="w-4 h-4 shrink-0 text-ink-tertiary" />
+                }
+              </button>
+              {isExpanded && (
+                <div className="px-4 pb-4 pt-3 space-y-3 border-t" style={{ borderColor: c.border + "33" }}>
+                  {parentTopics.map((t) => (
+                    <ReteachItem key={t.subtopic} topic={t} questions={questions} responses={responses} />
+                  ))}
+                </div>
+              )}
+            </div>
+          )
+        })}
       </div>
     </div>
   )
@@ -481,7 +668,13 @@ function ReteachPanel({
 // Default: groups students who share the same weak subtopics.
 // Click to expand a cluster and see individual students.
 
-function StudentClusterView({ students }: { students: StudentSummary[] }) {
+function StudentClusterView({
+  students,
+  topicGroups,
+}: {
+  students: StudentSummary[]
+  topicGroups: Record<string, TopicGroupDetail>
+}) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
 
   const toggle = (key: string) =>
@@ -500,20 +693,28 @@ function StudentClusterView({ students }: { students: StudentSummary[] }) {
     )
   }
 
-  // Group by the sorted set of weak subtopics (pct < 60)
+  const useGroups = Object.keys(topicGroups).length > 0
+
+  // Group by weak parent topics (when groups available) or weak subtopics (fallback)
   const clusters: Record<string, { subtopics: string[]; students: StudentSummary[] }> = {}
   const noGap: StudentSummary[] = []
 
   students.forEach((s) => {
-    const weak = Object.entries(s.subtopics)
+    const weakSubtopics = Object.entries(s.subtopics)
       .filter(([, pct]) => pct < 60)
       .sort((a, b) => a[1] - b[1])
       .map(([name]) => name)
 
-    if (weak.length === 0) {
+    if (weakSubtopics.length === 0) {
       noGap.push(s)
       return
     }
+
+    // Use parent topic names for clustering label when groups are available
+    const weak = useGroups
+      ? dedupe(weakSubtopics.map((name) => parentOf(name, topicGroups)))
+      : weakSubtopics
+
     const key = weak.join("|")
     if (!clusters[key]) clusters[key] = { subtopics: weak, students: [] }
     clusters[key].students.push(s)
@@ -1028,6 +1229,103 @@ function QuestionAnalysisTab({ responses }: { responses: AssessmentResponses }) 
   )
 }
 
+// ── Class Strengths — grouped by parent topic ──────────────────
+
+function ClassStrengths({
+  classStrengths,
+  topicGroups,
+}: {
+  classStrengths: DiagnosticReport["class_strengths"]
+  topicGroups: Record<string, TopicGroupDetail>
+}) {
+  const [expandedParents, setExpandedParents] = useState<Set<string>>(new Set())
+
+  if (classStrengths.length === 0) return null
+
+  const c = MASTERY_COLORS.mastered
+  const useGroups = Object.keys(topicGroups).length > 0
+
+  const toggleParent = (parent: string) =>
+    setExpandedParents((prev) => {
+      const next = new Set(prev)
+      next.has(parent) ? next.delete(parent) : next.add(parent)
+      return next
+    })
+
+  if (!useGroups) {
+    // Flat fallback
+    return (
+      <div className="bg-white rounded-[14px] border border-border-light shadow-card p-5">
+        <h3 className="font-display font-semibold text-base text-ink-primary mb-3">Class Strengths</h3>
+        <div className="flex flex-wrap gap-2">
+          {classStrengths.map((s) => (
+            <div key={s.subtopic} className="flex items-center gap-2 px-3 py-1.5 rounded-full" style={{ backgroundColor: c.bg }}>
+              <CheckCircle2 className="w-3.5 h-3.5 shrink-0" style={{ color: c.text }} strokeWidth={2} />
+              <span className="font-body text-[13px] font-medium" style={{ color: c.text }}>{s.subtopic} · {s.avg_pct}%</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  // Group strong subtopics by parent topic
+  const grouped: Record<string, { subtopic: string; avg_pct: number }[]> = {}
+  for (const s of classStrengths) {
+    const parent = parentOf(s.subtopic, topicGroups)
+    if (!grouped[parent]) grouped[parent] = []
+    grouped[parent].push(s)
+  }
+
+  // A parent topic is a strength if its overall avg_pct > 85
+  const strongParents = Object.entries(grouped).filter(([parent]) => {
+    const group = topicGroups[parent]
+    return group && group.avg_pct > 85
+  })
+
+  if (strongParents.length === 0 && classStrengths.length === 0) return null
+
+  return (
+    <div className="bg-white rounded-[14px] border border-border-light shadow-card p-5">
+      <h3 className="font-display font-semibold text-base text-ink-primary mb-3">Class Strengths</h3>
+
+      {/* Parent topic chips */}
+      <div className="flex flex-wrap gap-2 mb-3">
+        {Object.entries(grouped).map(([parent, subtopics]) => {
+          const group = topicGroups[parent]
+          const parentPct = group ? group.avg_pct : Math.round(subtopics.reduce((s, t) => s + t.avg_pct, 0) / subtopics.length)
+          const isExpanded = expandedParents.has(parent)
+          return (
+            <button
+              key={parent}
+              onClick={() => toggleParent(parent)}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-full transition-all"
+              style={{ backgroundColor: c.bg, outline: isExpanded ? `2px solid ${c.border}` : undefined }}
+            >
+              <CheckCircle2 className="w-3.5 h-3.5 shrink-0" style={{ color: c.text }} strokeWidth={2} />
+              <span className="font-body text-[13px] font-medium" style={{ color: c.text }}>{parent} · {parentPct}%</span>
+              {isExpanded ? <ChevronUp className="w-3 h-3" style={{ color: c.text }} /> : <ChevronDown className="w-3 h-3" style={{ color: c.text }} />}
+            </button>
+          )
+        })}
+      </div>
+
+      {/* Expanded: granular subtopics for the active parent */}
+      {Object.entries(grouped).map(([parent, subtopics]) =>
+        expandedParents.has(parent) ? (
+          <div key={parent} className="mt-1 mb-2 pl-3 border-l-2 flex flex-wrap gap-2" style={{ borderColor: c.border + "55" }}>
+            {subtopics.map((s) => (
+              <span key={s.subtopic} className="text-[12px] font-body px-2.5 py-1 rounded-full border" style={{ backgroundColor: c.bg + "55", borderColor: c.border + "44", color: c.text }}>
+                {s.subtopic} · {s.avg_pct}%
+              </span>
+            ))}
+          </div>
+        ) : null
+      )}
+    </div>
+  )
+}
+
 // ── Page ───────────────────────────────────────────────────────
 
 const TABS = ["Overview", "Student Responses", "Question Analysis"] as const
@@ -1125,9 +1423,18 @@ export default function AssessmentDiagnosticPage() {
     return <div className="p-8 text-center text-ink-secondary font-body">Assessment not found.</div>
   }
 
+  const topicGroups = report?.topic_groups ?? {}
+  const hasGroups = Object.keys(topicGroups).length > 0
+
+  // Count critical gaps at parent topic level when hierarchy is available
   const criticalCount = report
-    ? Object.values(report.subtopic_mastery).filter((s) => s.level === "critical").length
+    ? hasGroups
+      ? Object.values(topicGroups).filter((g) => g.level === "critical").length
+      : Object.values(report.subtopic_mastery).filter((s) => s.level === "critical").length
     : 0
+  const criticalLabel = hasGroups
+    ? `critical topic${criticalCount !== 1 ? "s" : ""}`
+    : `critical subtopic${criticalCount !== 1 ? "s" : ""}`
 
   return (
     <div className="p-4 md:p-8 max-w-[1280px] mx-auto space-y-6">
@@ -1237,7 +1544,7 @@ export default function AssessmentDiagnosticPage() {
                 <StatCard
                   label="Learning Gaps"
                   value={String(criticalCount)}
-                  sub={criticalCount === 0 ? "No critical gaps" : `critical subtopic${criticalCount !== 1 ? "s" : ""}`}
+                  sub={criticalCount === 0 ? "No critical gaps" : criticalLabel}
                   icon={Brain}
                   color={criticalCount > 0 ? "#E53935" : "#2D8A4E"}
                 />
@@ -1247,12 +1554,17 @@ export default function AssessmentDiagnosticPage() {
               <AtRiskPanel
                 students={report.student_summaries}
                 onReassess={openReassessFor}
+                topicGroups={topicGroups}
               />
 
               {/* Score distribution + Mastery heatmap */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
                 <ScoreDistributionChart data={report.score_distribution} />
-                <MasteryHeatmap data={report.subtopic_mastery} topics={report.topics_to_reteach} />
+                <MasteryHeatmap
+                  data={report.subtopic_mastery}
+                  topics={report.topics_to_reteach}
+                  topicGroups={topicGroups}
+                />
               </div>
 
               {/* Reteach panel + Student cluster view */}
@@ -1261,30 +1573,19 @@ export default function AssessmentDiagnosticPage() {
                   topics={report.topics_to_reteach}
                   questions={assessment.questions}
                   responses={responses}
+                  topicGroups={topicGroups}
                 />
-                <StudentClusterView students={report.student_summaries} />
+                <StudentClusterView
+                  students={report.student_summaries}
+                  topicGroups={topicGroups}
+                />
               </div>
 
-              {/* Class strengths */}
-              {report.class_strengths.length > 0 && (
-                <div className="bg-white rounded-[14px] border border-border-light shadow-card p-5">
-                  <h3 className="font-display font-semibold text-base text-ink-primary mb-3">Class Strengths</h3>
-                  <div className="flex flex-wrap gap-2">
-                    {report.class_strengths.map((s) => (
-                      <div
-                        key={s.subtopic}
-                        className="flex items-center gap-2 px-3 py-1.5 rounded-full"
-                        style={{ backgroundColor: MASTERY_COLORS.mastered.bg }}
-                      >
-                        <CheckCircle2 className="w-3.5 h-3.5" style={{ color: MASTERY_COLORS.mastered.text }} strokeWidth={2} />
-                        <span className="font-body text-[13px] font-medium" style={{ color: MASTERY_COLORS.mastered.text }}>
-                          {s.subtopic} · {s.avg_pct}%
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
+              {/* Class strengths — grouped by parent topic when hierarchy is available */}
+              <ClassStrengths
+                classStrengths={report.class_strengths}
+                topicGroups={topicGroups}
+              />
             </div>
           )}
 

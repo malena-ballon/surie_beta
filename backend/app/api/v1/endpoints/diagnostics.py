@@ -51,6 +51,7 @@ def _report_to_dict(report: DiagnosticReport) -> dict:
         "topics_to_reteach": report.topics_to_reteach,
         "class_strengths": report.class_strengths,
         "student_summaries": report.student_summaries or [],
+        "topic_groups": report.topic_groups or {},
         "generated_at": report.generated_at.isoformat(),
     }
 
@@ -214,6 +215,40 @@ async def get_assessment_responses(
         "student_responses": student_responses,
         "question_analysis": question_analysis,
     }
+
+
+@router.patch("/{assessment_id}/taxonomy")
+async def update_taxonomy(
+    assessment_id: uuid.UUID,
+    body: dict,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """
+    Update subtopic → parent topic mapping for an assessment.
+    Body: {subtopic: parent_topic, ...}
+    Re-sync the diagnostic report after editing to recompute topic_groups.
+    """
+    await _get_assessment_or_403(assessment_id, db, current_user)
+    from app.models.topic_taxonomy import TopicTaxonomy
+
+    for subtopic, parent_topic in body.items():
+        existing = await db.scalar(
+            select(TopicTaxonomy).where(
+                TopicTaxonomy.assessment_id == assessment_id,
+                TopicTaxonomy.subtopic == subtopic,
+            )
+        )
+        if existing:
+            existing.parent_topic = str(parent_topic)
+        else:
+            db.add(TopicTaxonomy(
+                assessment_id=assessment_id,
+                subtopic=str(subtopic),
+                parent_topic=str(parent_topic),
+            ))
+    await db.commit()
+    return {"updated": len(body)}
 
 
 @router.get("/{assessment_id}/diagnostics/students")

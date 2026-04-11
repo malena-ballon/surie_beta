@@ -4,6 +4,7 @@ Supports assessments with as few as 1 graded submission.
 """
 from __future__ import annotations
 
+import json
 import logging
 import uuid
 from collections import Counter, defaultdict
@@ -24,8 +25,12 @@ from app.models.diagnostic_report import DiagnosticReport
 from app.models.response import Response as ResponseModel
 from app.models.student_mastery import StudentMastery, TrendType
 from app.models.submission import SubmissionStatus
+from app.models.topic_taxonomy import TopicTaxonomy
 
 logger = logging.getLogger(__name__)
+
+GEMINI_MODEL = "gemini-2.5-flash"
+GEMINI_URL = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
 
 # ── Mastery level classification ───────────────────────────────
 
@@ -57,13 +62,10 @@ async def _gemini_misconception(subtopic: str, wrong_answers: list[str]) -> str:
         f"Output ONLY that sentence."
     )
 
-    GEMINI_MODEL = "gemini-2.5-flash"
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
-
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
             resp = await client.post(
-                url,
+                GEMINI_URL,
                 params={"key": settings.GEMINI_API_KEY},
                 headers={"content-type": "application/json"},
                 json={
@@ -77,6 +79,56 @@ async def _gemini_misconception(subtopic: str, wrong_answers: list[str]) -> str:
         logger.warning("Gemini misconception call failed: %s", exc)
 
     return f"Students struggled with '{subtopic}'."
+
+
+# ── AI topic taxonomy via Gemini ───────────────────────────────
+
+async def _gemini_topic_taxonomy(subtopics: list[str]) -> dict[str, str]:
+    """
+    Returns {subtopic: parent_topic} mapping.
+    Falls back to subtopic == parent_topic (flat, one group each) on any failure.
+    """
+    if not settings.GEMINI_API_KEY or not subtopics:
+        return {s: s for s in subtopics}
+
+    prompt = (
+        "You are a curriculum expert for Philippine K-12 education.\n"
+        "Group the following assessment subtopics into 2–5 broad parent topics.\n"
+        "Rules:\n"
+        "- Every subtopic must be assigned to exactly one parent topic.\n"
+        "- Parent topic names should be short (2–4 words), capitalized, curriculum-aligned.\n"
+        "- Do not invent subtopics not in the list.\n"
+        "- Output ONLY a valid JSON object mapping each subtopic to its parent topic.\n"
+        "- Example format: {\"subtopic name\": \"Parent Topic\", ...}\n"
+        "- No markdown fences, no explanation.\n\n"
+        f"Subtopics:\n" + "\n".join(f"- {s}" for s in subtopics)
+    )
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.post(
+                GEMINI_URL,
+                params={"key": settings.GEMINI_API_KEY},
+                headers={"content-type": "application/json"},
+                json={
+                    "contents": [{"parts": [{"text": prompt}]}],
+                    "generationConfig": {"maxOutputTokens": 512, "temperature": 0.1},
+                },
+            )
+            if resp.is_success:
+                raw = resp.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
+                # Strip markdown fences if Gemini wraps the output
+                raw = raw.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+                mapping = json.loads(raw)
+                # Validate: iterate source subtopics (not AI output) to prevent hallucinations
+                validated: dict[str, str] = {}
+                for sub in subtopics:
+                    validated[sub] = str(mapping.get(sub, sub))
+                return validated
+    except Exception as exc:
+        logger.warning("Gemini taxonomy call failed: %s", exc)
+
+    return {s: s for s in subtopics}
 
 
 # ── Main generation function ───────────────────────────────────
@@ -195,6 +247,46 @@ async def generate_diagnostic_report(
             "level": _classify(pct),
         }
 
+    # ── 8b. Build / reuse topic taxonomy ──────────────────────
+    existing_taxonomy_rows = (await db.execute(
+        select(TopicTaxonomy).where(TopicTaxonomy.assessment_id == assessment_id)
+    )).scalars().all()
+
+    if existing_taxonomy_rows:
+        # Respect any teacher edits already stored
+        taxonomy_map: dict[str, str] = {row.subtopic: row.parent_topic for row in existing_taxonomy_rows}
+        # Any new subtopics (from new submissions) get a self-group default
+        for sub in all_subtopics:
+            if sub not in taxonomy_map:
+                taxonomy_map[sub] = sub
+    else:
+        # First generation — ask AI to group the subtopics
+        taxonomy_map = await _gemini_topic_taxonomy(list(all_subtopics))
+        # Persist so teachers can edit later and re-syncs don't re-call AI
+        for subtopic_name, parent_topic in taxonomy_map.items():
+            db.add(TopicTaxonomy(
+                assessment_id=assessment_id,
+                subtopic=subtopic_name,
+                parent_topic=parent_topic,
+            ))
+
+    # ── 8c. Aggregate topic_groups ────────────────────────────
+    # {parent_topic: {avg_pct, level, subtopics: {subtopic: {pct, level}}}}
+    parent_children: dict[str, list[str]] = defaultdict(list)
+    for sub_name, parent in taxonomy_map.items():
+        if sub_name in subtopic_mastery:
+            parent_children[parent].append(sub_name)
+
+    topic_groups: dict[str, dict] = {}
+    for parent, children in parent_children.items():
+        child_pcts = [subtopic_mastery[c]["pct"] for c in children]
+        parent_pct = round(sum(child_pcts) / len(child_pcts), 1) if child_pcts else 0.0
+        topic_groups[parent] = {
+            "avg_pct": parent_pct,
+            "level": _classify(parent_pct),
+            "subtopics": {c: subtopic_mastery[c] for c in children},
+        }
+
     # ── 9. Topics to reteach (class avg < 60%) ────────────────
     topics_to_reteach = []
     for subtopic, data in subtopic_mastery.items():
@@ -304,6 +396,7 @@ async def generate_diagnostic_report(
         topics_to_reteach=topics_to_reteach,
         class_strengths=class_strengths,
         student_summaries=student_summaries,
+        topic_groups=topic_groups,
         generated_at=now,
     )
 
