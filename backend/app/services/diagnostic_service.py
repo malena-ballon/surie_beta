@@ -86,22 +86,26 @@ async def _gemini_misconception(subtopic: str, wrong_answers: list[str]) -> str:
 async def _gemini_topic_taxonomy(subtopics: list[str]) -> dict[str, str]:
     """
     Returns {subtopic: parent_topic} mapping.
-    Falls back to subtopic == parent_topic (flat, one group each) on any failure.
+    Falls back to subtopic == parent_topic (flat) only on hard failure.
     """
     if not settings.GEMINI_API_KEY or not subtopics:
         return {s: s for s in subtopics}
 
+    numbered = "\n".join(f"{i+1}. {s}" for i, s in enumerate(subtopics))
     prompt = (
         "You are a curriculum expert for Philippine K-12 education.\n"
-        "Group the following assessment subtopics into 2–5 broad parent topics.\n"
-        "Rules:\n"
-        "- Every subtopic must be assigned to exactly one parent topic.\n"
-        "- Parent topic names should be short (2–4 words), capitalized, curriculum-aligned.\n"
-        "- Do not invent subtopics not in the list.\n"
-        "- Output ONLY a valid JSON object mapping each subtopic to its parent topic.\n"
-        "- Example format: {\"subtopic name\": \"Parent Topic\", ...}\n"
-        "- No markdown fences, no explanation.\n\n"
-        f"Subtopics:\n" + "\n".join(f"- {s}" for s in subtopics)
+        "Your job is to group granular exam subtopics into broad parent topics.\n\n"
+        "STRICT RULES:\n"
+        "- Group ALL subtopics into 2–5 broad parent topics.\n"
+        "- Related subtopics MUST share the same parent topic name.\n"
+        "  Example: 'Sound', 'Pitch', 'Travel of Sound (Medium)' → all map to 'Sound & Waves'\n"
+        "  Example: 'Electric Circuits', 'Parallel Circuit', 'Conductors' → all map to 'Electricity & Magnetism'\n"
+        "- Parent topic names must be short (2–4 words), title-cased, curriculum-aligned.\n"
+        "- Every subtopic must appear as a key in the output JSON.\n"
+        "- Copy the subtopic names EXACTLY as given — same spelling, same capitalization.\n"
+        "- Output ONLY a valid JSON object. No markdown, no explanation.\n\n"
+        f"Subtopics to group:\n{numbered}\n\n"
+        "Output format: {\"exact subtopic name\": \"Parent Topic\", ...}"
     )
 
     try:
@@ -112,23 +116,36 @@ async def _gemini_topic_taxonomy(subtopics: list[str]) -> dict[str, str]:
                 headers={"content-type": "application/json"},
                 json={
                     "contents": [{"parts": [{"text": prompt}]}],
-                    "generationConfig": {"maxOutputTokens": 512, "temperature": 0.1},
+                    "generationConfig": {"maxOutputTokens": 1024, "temperature": 0.1},
                 },
             )
             if resp.is_success:
                 raw = resp.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
-                # Strip markdown fences if Gemini wraps the output
                 raw = raw.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
                 mapping = json.loads(raw)
-                # Validate: iterate source subtopics (not AI output) to prevent hallucinations
+
+                # Case-insensitive lookup: build a lowercased index of AI output keys
+                lower_mapping = {k.lower(): v for k, v in mapping.items()}
+
                 validated: dict[str, str] = {}
                 for sub in subtopics:
-                    validated[sub] = str(mapping.get(sub, sub))
+                    # Try exact match first, then case-insensitive
+                    parent = mapping.get(sub) or lower_mapping.get(sub.lower()) or sub
+                    validated[sub] = str(parent)
+
+                # Sanity check: if every subtopic mapped to itself, the AI didn't group anything
+                # — treat as failure so we don't persist useless rows
+                unique_parents = set(validated.values())
+                if len(unique_parents) == len(subtopics):
+                    logger.warning("Gemini taxonomy returned all 1:1 mappings — retrying is not worth it, will return as-is but not persist")
+                    return {}  # empty signals caller to skip persisting
+
+                logger.info("Gemini taxonomy: %d subtopics → %d parent topics", len(subtopics), len(unique_parents))
                 return validated
     except Exception as exc:
         logger.warning("Gemini taxonomy call failed: %s", exc)
 
-    return {s: s for s in subtopics}
+    return {}  # empty — caller will skip persisting and fall back to flat view
 
 
 # ── Main generation function ───────────────────────────────────
@@ -248,27 +265,48 @@ async def generate_diagnostic_report(
         }
 
     # ── 8b. Build / reuse topic taxonomy ──────────────────────
+    from sqlalchemy import delete as sa_delete
+
     existing_taxonomy_rows = (await db.execute(
         select(TopicTaxonomy).where(TopicTaxonomy.assessment_id == assessment_id)
     )).scalars().all()
 
-    if existing_taxonomy_rows:
-        # Respect any teacher edits already stored
+    # Detect degenerate taxonomy: every subtopic maps to itself (bad AI fallback)
+    is_degenerate = (
+        len(existing_taxonomy_rows) > 0
+        and all(row.subtopic == row.parent_topic for row in existing_taxonomy_rows)
+    )
+
+    if existing_taxonomy_rows and not is_degenerate:
+        # Healthy stored taxonomy — respect it (includes any teacher edits)
         taxonomy_map: dict[str, str] = {row.subtopic: row.parent_topic for row in existing_taxonomy_rows}
-        # Any new subtopics (from new submissions) get a self-group default
+        # Any new subtopics from new submissions get a self-group default for now
         for sub in all_subtopics:
             if sub not in taxonomy_map:
                 taxonomy_map[sub] = sub
     else:
-        # First generation — ask AI to group the subtopics
-        taxonomy_map = await _gemini_topic_taxonomy(list(all_subtopics))
-        # Persist so teachers can edit later and re-syncs don't re-call AI
-        for subtopic_name, parent_topic in taxonomy_map.items():
-            db.add(TopicTaxonomy(
-                assessment_id=assessment_id,
-                subtopic=subtopic_name,
-                parent_topic=parent_topic,
-            ))
+        # Either first run or bad rows — purge stale rows and call AI
+        if is_degenerate:
+            logger.info("Detected degenerate 1:1 taxonomy for %s — purging and re-running AI", assessment_id)
+            await db.execute(
+                sa_delete(TopicTaxonomy).where(TopicTaxonomy.assessment_id == assessment_id)
+            )
+            await db.flush()
+
+        ai_map = await _gemini_topic_taxonomy(list(all_subtopics))
+
+        if ai_map:
+            # Good grouping — persist it
+            taxonomy_map = ai_map
+            for subtopic_name, parent_topic in taxonomy_map.items():
+                db.add(TopicTaxonomy(
+                    assessment_id=assessment_id,
+                    subtopic=subtopic_name,
+                    parent_topic=parent_topic,
+                ))
+        else:
+            # AI failed — use flat map in memory only, don't persist
+            taxonomy_map = {s: s for s in all_subtopics}
 
     # ── 8c. Aggregate topic_groups ────────────────────────────
     # {parent_topic: {avg_pct, level, subtopics: {subtopic: {pct, level}}}}
