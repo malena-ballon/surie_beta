@@ -508,6 +508,31 @@ export const api = {
     return req<void>(`/api/v1/assessments/${id}`, { method: "DELETE" })
   },
 
+  // Reviewer edits + PDF
+  updateReviewer(reviewerId: string, content: string) {
+    return req<{ id: string; content: string }>(`/api/v1/reviewers/${reviewerId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ content }),
+    })
+  },
+  async downloadReviewerPdf(reviewerId: string, filename: string) {
+    const token = typeof window !== "undefined" ? localStorage.getItem("surie_token") : null
+    const res = await fetch(`${BASE}/api/v1/reviewers/${reviewerId}/pdf`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+    if (!res.ok) {
+      const json = await res.json().catch(() => ({}))
+      throw new Error(json.detail ?? `PDF generation failed: ${res.status}`)
+    }
+    const blob = await res.blob()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = filename.endsWith(".pdf") ? filename : `${filename}.pdf`
+    a.click()
+    URL.revokeObjectURL(url)
+  },
+
   // Dashboard
   getDashboard() {
     return req<DashboardData>("/api/v1/dashboard")

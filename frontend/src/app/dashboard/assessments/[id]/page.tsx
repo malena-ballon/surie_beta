@@ -1352,53 +1352,6 @@ type ReviewerResult = {
 
 type ReviewerView = "loading" | "list" | "config" | "viewing" | "generating"
 
-function markdownToHtml(md: string): string {
-  return md
-    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-    .replace(/^### (.+)$/gm, "<h3>$1</h3>")
-    .replace(/^## (.+)$/gm, "<h2>$1</h2>")
-    .replace(/^# (.+)$/gm, "<h1>$1</h1>")
-    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
-    .replace(/\*(.+?)\*/g, "<em>$1</em>")
-    .replace(/^[-*] (.+)$/gm, "<li>$1</li>")
-    .replace(/(<li>.*<\/li>\n?)+/g, (m) => `<ul>${m}</ul>`)
-    .replace(/\n{2,}/g, "</p><p>")
-    .replace(/^(?!<[hul])(.+)$/gm, (l) => l.trim() ? l : "")
-    .replace(/^(<p>)?([^<\n].+)$/gm, "<p>$2</p>")
-}
-
-function handlePdfDownload(result: ReviewerResult) {
-  const html = markdownToHtml(result.content)
-  const win = window.open("", "_blank")
-  if (!win) return
-  win.document.write(`<!DOCTYPE html><html><head>
-<meta charset="utf-8"/>
-<title>${result.title}</title>
-<style>
-  body { font-family: Georgia, serif; max-width: 800px; margin: 40px auto; padding: 0 24px; color: #1a1a1a; line-height: 1.7; }
-  h1 { font-size: 1.6rem; border-bottom: 2px solid #0072C6; padding-bottom: 8px; color: #0072C6; }
-  h2 { font-size: 1.25rem; color: #0072C6; margin-top: 2rem; }
-  h3 { font-size: 1.05rem; color: #333; margin-top: 1.5rem; }
-  ul { padding-left: 1.5rem; }
-  li { margin-bottom: 4px; }
-  p { margin: 0.75rem 0; }
-  strong { color: #111; }
-  .meta { font-family: sans-serif; font-size: 0.8rem; color: #888; margin-bottom: 1.5rem; }
-  @media print { body { margin: 0; } }
-</style>
-</head><body>
-<h1>${result.title}</h1>
-<div class="meta">
-  ${result.subject ? `Subject: ${result.subject} &nbsp;|&nbsp;` : ""}
-  ${result.grade_level ? `Grade ${result.grade_level} &nbsp;|&nbsp;` : ""}
-  Generated ${new Date(result.generated_at).toLocaleDateString("en-PH", { month: "long", day: "numeric", year: "numeric" })}
-</div>
-${html}
-</body></html>`)
-  win.document.close()
-  setTimeout(() => { win.print() }, 400)
-}
-
 function ReviewerModal({
   report,
   assessmentId,
@@ -1415,6 +1368,10 @@ function ReviewerModal({
   const [msgIdx, setMsgIdx] = useState(0)
   const [current, setCurrent] = useState<ReviewerResult | null>(null)
   const [copied, setCopied] = useState(false)
+  const [editing, setEditing] = useState(false)
+  const [editContent, setEditContent] = useState("")
+  const [saving, setSaving] = useState(false)
+  const [downloading, setDownloading] = useState(false)
 
   // Load past reviewers on open
   useEffect(() => {
@@ -1431,6 +1388,12 @@ function ReviewerModal({
     const t = setInterval(() => setMsgIdx((i) => (i + 1) % REVIEWER_GEN_MESSAGES.length), 2500)
     return () => clearInterval(t)
   }, [view])
+
+  // Reset edit state when switching reviewers
+  useEffect(() => {
+    setEditing(false)
+    setEditContent(current?.content ?? "")
+  }, [current])
 
   const weakCount = Object.values(report.subtopic_mastery).filter((s) => s.pct < 70).length
 
@@ -1452,6 +1415,36 @@ function ReviewerModal({
     await navigator.clipboard.writeText(current.content)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
+  }
+
+  const handleDownloadPdf = async () => {
+    if (!current?.id) return
+    setDownloading(true)
+    try {
+      const safe = current.title.replace(/[^a-z0-9]/gi, "_").slice(0, 60)
+      await api.downloadReviewerPdf(current.id, `${safe}.pdf`)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "PDF download failed")
+    } finally {
+      setDownloading(false)
+    }
+  }
+
+  const handleSave = async () => {
+    if (!current?.id) return
+    setSaving(true)
+    try {
+      await api.updateReviewer(current.id, editContent)
+      const updated = { ...current, content: editContent }
+      setCurrent(updated)
+      setPastReviewers((prev) => prev.map((r) => r.id === current.id ? updated : r))
+      setEditing(false)
+      toast.success("Reviewer saved")
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Save failed")
+    } finally {
+      setSaving(false)
+    }
   }
 
   const inputCls =
@@ -1496,7 +1489,7 @@ function ReviewerModal({
             <h2 className="font-display font-semibold text-lg text-ink-primary">{headerTitle}</h2>
           </div>
           <div className="flex items-center gap-2">
-            {view === "viewing" && current && (
+            {view === "viewing" && current && !editing && (
               <>
                 <button
                   onClick={handleCopy}
@@ -1506,11 +1499,18 @@ function ReviewerModal({
                   {copied ? "Copied!" : "Copy"}
                 </button>
                 <button
-                  onClick={() => handlePdfDownload(current)}
+                  onClick={() => { setEditContent(current.content); setEditing(true) }}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-[8px] text-[12px] font-medium font-body text-ink-secondary hover:text-ink-primary border border-border-light hover:border-border-default transition-colors"
                 >
-                  <Download className="w-3.5 h-3.5" />
-                  Download PDF
+                  Edit
+                </button>
+                <button
+                  onClick={handleDownloadPdf}
+                  disabled={downloading}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-[8px] text-[12px] font-medium font-body text-ink-secondary hover:text-ink-primary border border-border-light hover:border-border-default transition-colors disabled:opacity-50"
+                >
+                  {downloading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                  {downloading ? "…" : "PDF"}
                 </button>
               </>
             )}
@@ -1618,15 +1618,37 @@ function ReviewerModal({
                 </span>
               </div>
 
-              <ReviewerContent content={current.content} />
+              {editing ? (
+                <textarea
+                  value={editContent}
+                  onChange={(e) => setEditContent(e.target.value)}
+                  className="w-full min-h-[400px] px-4 py-3 text-[13px] font-body text-ink-primary leading-relaxed border border-border-default rounded-[10px] focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 resize-y transition-colors"
+                  spellCheck={false}
+                />
+              ) : (
+                <ReviewerContent content={current.content} />
+              )}
 
-              <div className="pt-2 border-t border-border-light">
+              <div className="pt-2 border-t border-border-light flex items-center justify-between">
                 <button
-                  onClick={() => { setCurrent(null); setView(pastReviewers.length > 0 ? "list" : "config") }}
+                  onClick={() => { setEditing(false); setCurrent(null); setView(pastReviewers.length > 0 ? "list" : "config") }}
                   className="text-[12px] font-body text-ink-tertiary hover:text-ink-primary transition-colors"
                 >
                   ← Back to reviewers
                 </button>
+                {editing && (
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setEditing(false)}
+                      className="text-[12px] font-body text-ink-tertiary hover:text-ink-primary transition-colors px-3 py-1.5"
+                    >
+                      Cancel
+                    </button>
+                    <Button variant="gradient" onClick={handleSave} disabled={saving}>
+                      {saving ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Saving…</> : "Save Changes"}
+                    </Button>
+                  </div>
+                )}
               </div>
             </div>
           )}
