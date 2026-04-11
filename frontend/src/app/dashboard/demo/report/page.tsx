@@ -358,7 +358,11 @@ export default function DemoReportPage() {
           <DemoReportRow
             key={r.id}
             report={r}
-            onClick={r.id === "r1" ? () => router.push("/dashboard/demo/assessment") : undefined}
+            onClick={
+              r.id === "r1" ? () => router.push("/dashboard/demo/assessment") :
+              r.id === "r4" ? () => router.push("/dashboard/demo/chemistry") :
+              undefined
+            }
           />
         ))}
       </div>

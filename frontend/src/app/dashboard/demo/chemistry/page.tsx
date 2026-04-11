@@ -49,14 +49,6 @@ const BAND_COLORS: Record<string, string> = {
   "90–100": "#42A5F5",
 }
 
-function masteryLevel(pct: number): MasteryLevel {
-  if (pct < 40) return "critical"
-  if (pct < 60) return "remedial"
-  if (pct < 75) return "average"
-  if (pct < 90) return "good"
-  return "mastered"
-}
-
 function heatmapColor(pct: number) {
   if (pct < 50) return { bg: "#FFEBEE", border: "#EF5350", text: "#C62828" }
   if (pct < 80) return { bg: "#FFF8E1", border: "#FFCA28", text: "#8B7500" }
@@ -66,79 +58,95 @@ function heatmapColor(pct: number) {
 // ── Hardcoded demo data ────────────────────────────────────────
 
 const SCORE_DIST = [
-  { band: "0–59", count: 3 },
-  { band: "60–69", count: 2 },
-  { band: "70–79", count: 4 },
-  { band: "80–89", count: 10 },
-  { band: "90–100", count: 16 },
+  { band: "0–59",   count: 11 },
+  { band: "60–69",  count: 8  },
+  { band: "70–79",  count: 7  },
+  { band: "80–89",  count: 5  },
+  { band: "90–100", count: 1  },
 ]
 
 const TOPIC_GROUPS = [
   {
-    parent: "Linear Equations",
-    avg_pct: 91,
+    parent: "Chemical Bonding",
+    avg_pct: 78,
     subtopics: [
-      { name: "Solving for x", pct: 94 },
-      { name: "One-step equations", pct: 91 },
-      { name: "Two-step equations", pct: 88 },
+      { name: "Covalent bonds",  pct: 82 },
+      { name: "Ionic bonds",     pct: 79 },
+      { name: "Metallic bonds",  pct: 72 },
     ],
   },
   {
-    parent: "Quadratic Equations",
-    avg_pct: 76,
+    parent: "Reaction Types",
+    avg_pct: 61,
     subtopics: [
-      { name: "Standard form", pct: 82 },
-      { name: "Factoring", pct: 76 },
-      { name: "Quadratic formula", pct: 71 },
+      { name: "Synthesis reactions",      pct: 71 },
+      { name: "Decomposition reactions",  pct: 63 },
+      { name: "Displacement reactions",   pct: 57 },
     ],
   },
   {
-    parent: "Systems of Equations",
-    avg_pct: 63,
+    parent: "Balancing Equations",
+    avg_pct: 49,
     subtopics: [
-      { name: "Substitution method", pct: 68 },
-      { name: "Elimination method", pct: 63 },
-      { name: "Graphical method", pct: 59 },
+      { name: "Conservation of mass",  pct: 54 },
+      { name: "Coefficient rules",     pct: 47 },
+      { name: "Polyatomic ions",       pct: 43 },
     ],
   },
 ]
 
 const RETEACH_TOPICS = [
   {
-    parent: "Systems of Equations",
-    avg_pct: 63,
-    level: "remedial" as MasteryLevel,
+    parent: "Balancing Equations",
+    avg_pct: 49,
+    level: "critical" as MasteryLevel,
     subtopics: [
       {
-        name: "Graphical method",
-        pct: 59,
-        level: "remedial" as MasteryLevel,
+        name: "Polyatomic ions",
+        pct: 43,
+        level: "critical" as MasteryLevel,
         misconception:
-          "Students struggle to identify the intersection point when both lines have negative slopes. Many incorrectly plot the y-intercept on the wrong side of the axis.",
-        commonMistake: "Common mistake: 14 out of 35 students chose an incorrect intersection point when lines crossed in the third quadrant.",
+          "Students treat polyatomic ions as individual atoms when balancing, breaking them apart and recounting each element separately instead of keeping the group as a unit.",
+        commonMistake: "Common mistake: 19 out of 32 students split the sulfate (SO₄²⁻) ion when balancing, leading to incorrect atom counts.",
       },
       {
-        name: "Elimination method",
-        pct: 63,
+        name: "Coefficient rules",
+        pct: 47,
+        level: "critical" as MasteryLevel,
+        misconception:
+          "Many students change subscripts instead of coefficients when balancing, which alters the chemical formula of the compound rather than adjusting the number of molecules.",
+        commonMistake: "Common mistake: 16 out of 32 students modified subscripts in H₂O rather than placing a coefficient in front of the formula.",
+      },
+      {
+        name: "Conservation of mass",
+        pct: 54,
         level: "remedial" as MasteryLevel,
         misconception:
-          "Students frequently swap signs incorrectly when multiplying equations to match coefficients. The negative sign distribution error is especially common in two-digit coefficient problems.",
-        commonMistake: "Common mistake: 11 out of 35 students chose an answer with a sign error in the final variable.",
+          "Students do not verify that atom counts match on both sides after placing one coefficient. Many stop after one adjustment without rechecking the full equation.",
+        commonMistake: "Common mistake: 12 out of 32 students left equations partially balanced, fixing only one element type.",
       },
     ],
   },
   {
-    parent: "Quadratic Equations",
-    avg_pct: 76,
-    level: "average" as MasteryLevel,
+    parent: "Reaction Types",
+    avg_pct: 61,
+    level: "remedial" as MasteryLevel,
     subtopics: [
       {
-        name: "Quadratic formula",
-        pct: 71,
-        level: "average" as MasteryLevel,
+        name: "Displacement reactions",
+        pct: 57,
+        level: "remedial" as MasteryLevel,
         misconception:
-          "Students make computation errors with the discriminant (b² − 4ac), especially when b is negative. Many fail to square the negative value correctly before subtracting 4ac.",
-        commonMistake: "Common mistake: 9 out of 35 students computed b² as a negative value instead of squaring it.",
+          "Students confuse single and double displacement reactions. They cannot reliably predict which element replaces which, especially when activity series knowledge is needed.",
+        commonMistake: "Common mistake: 14 out of 32 students swapped reactant and product positions in single displacement reactions.",
+      },
+      {
+        name: "Decomposition reactions",
+        pct: 63,
+        level: "remedial" as MasteryLevel,
+        misconception:
+          "Students struggle to predict the correct number of decomposition products. Many assume all decomposition reactions produce exactly two products regardless of the compound.",
+        commonMistake: "Common mistake: 11 out of 32 students predicted only two products for multi-product decomposition reactions.",
       },
     ],
   },
@@ -146,109 +154,151 @@ const RETEACH_TOPICS = [
 
 const AT_RISK_STUDENTS = [
   {
-    id: "s1",
-    name: "Juan dela Cruz",
-    score: 13,
-    max_score: 35,
+    id: "c1",
+    name: "Maria Santos",
+    score: 10,
+    max_score: 40,
+    pct: 31,
+    level: "critical" as MasteryLevel,
+    weakIn: ["Balancing Equations", "Reaction Types"],
+    subtopics: [
+      { name: "Polyatomic ions", pct: 15 },
+      { name: "Coefficient rules", pct: 20 },
+      { name: "Displacement reactions", pct: 25 },
+      { name: "Conservation of mass", pct: 30 },
+    ],
+  },
+  {
+    id: "c2",
+    name: "Jose Reyes",
+    score: 15,
+    max_score: 40,
     pct: 37,
     level: "critical" as MasteryLevel,
-    weakIn: ["Systems of Equations", "Quadratic Equations"],
+    weakIn: ["Balancing Equations", "Reaction Types"],
     subtopics: [
-      { name: "Graphical method", pct: 20 },
-      { name: "Elimination method", pct: 27 },
-      { name: "Quadratic formula", pct: 35 },
-      { name: "Factoring", pct: 40 },
+      { name: "Polyatomic ions", pct: 20 },
+      { name: "Coefficient rules", pct: 25 },
+      { name: "Displacement reactions", pct: 35 },
     ],
   },
   {
-    id: "s2",
-    name: "Carlos Mendoza",
-    score: 15,
-    max_score: 35,
-    pct: 43,
+    id: "c3",
+    name: "Ana Garcia",
+    score: 17,
+    max_score: 40,
+    pct: 42,
     level: "remedial" as MasteryLevel,
-    weakIn: ["Systems of Equations", "Quadratic Equations"],
+    weakIn: ["Balancing Equations"],
     subtopics: [
-      { name: "Graphical method", pct: 30 },
-      { name: "Elimination method", pct: 40 },
-      { name: "Quadratic formula", pct: 45 },
+      { name: "Polyatomic ions", pct: 30 },
+      { name: "Coefficient rules", pct: 35 },
+      { name: "Conservation of mass", pct: 40 },
     ],
   },
   {
-    id: "s3",
-    name: "Pedro Bautista",
+    id: "c4",
+    name: "Andres Torres",
     score: 18,
-    max_score: 35,
-    pct: 51,
+    max_score: 40,
+    pct: 45,
     level: "remedial" as MasteryLevel,
-    weakIn: ["Systems of Equations"],
+    weakIn: ["Balancing Equations", "Reaction Types"],
     subtopics: [
-      { name: "Graphical method", pct: 40 },
-      { name: "Elimination method", pct: 50 },
-      { name: "Substitution method", pct: 55 },
+      { name: "Polyatomic ions", pct: 30 },
+      { name: "Displacement reactions", pct: 40 },
+      { name: "Decomposition reactions", pct: 45 },
+    ],
+  },
+  {
+    id: "c5",
+    name: "Sofia Villanueva",
+    score: 19,
+    max_score: 40,
+    pct: 48,
+    level: "remedial" as MasteryLevel,
+    weakIn: ["Balancing Equations"],
+    subtopics: [
+      { name: "Polyatomic ions", pct: 35 },
+      { name: "Coefficient rules", pct: 40 },
     ],
   },
 ]
 
-// Clustered student groups for the bottom table
 const STUDENT_CLUSTERS = [
   {
     key: "cluster-1",
-    label: "Systems of Equations + Quadratic Equations",
-    count: 3,
+    label: "Balancing Equations + Reaction Types",
+    count: 5,
     students: [
-      { name: "Juan dela Cruz",   score: "13/35", level: "critical" as MasteryLevel },
-      { name: "Carlos Mendoza",   score: "15/35", level: "remedial" as MasteryLevel },
-      { name: "Pedro Bautista",   score: "18/35", level: "remedial" as MasteryLevel },
+      { name: "Maria Santos",    score: "10/40", level: "critical" as MasteryLevel },
+      { name: "Jose Reyes",      score: "15/40", level: "critical" as MasteryLevel },
+      { name: "Ana Garcia",      score: "17/40", level: "remedial" as MasteryLevel },
+      { name: "Andres Torres",   score: "18/40", level: "remedial" as MasteryLevel },
+      { name: "Sofia Villanueva",score: "19/40", level: "remedial" as MasteryLevel },
     ],
   },
   {
     key: "cluster-2",
-    label: "Quadratic Equations only",
-    count: 7,
+    label: "Balancing Equations only",
+    count: 8,
     students: [
-      { name: "Sofia Villanueva", score: "24/35", level: "average" as MasteryLevel },
-      { name: "Andres Torres",    score: "25/35", level: "average" as MasteryLevel },
-      { name: "Grace Navarro",    score: "26/35", level: "average" as MasteryLevel },
-      { name: "Mark Castillo",    score: "24/35", level: "average" as MasteryLevel },
-      { name: "Lea Aquino",       score: "25/35", level: "average" as MasteryLevel },
-      { name: "Rico Gomez",       score: "26/35", level: "average" as MasteryLevel },
-      { name: "Tina Soriano",     score: "27/35", level: "average" as MasteryLevel },
+      { name: "Tina Soriano",    score: "22/40", level: "average" as MasteryLevel },
+      { name: "Rico Gomez",      score: "24/40", level: "average" as MasteryLevel },
+      { name: "Lea Aquino",      score: "25/40", level: "average" as MasteryLevel },
+      { name: "Mark Castillo",   score: "24/40", level: "average" as MasteryLevel },
+      { name: "Grace Navarro",   score: "25/40", level: "average" as MasteryLevel },
+      { name: "Paolo Dela Cruz", score: "26/40", level: "average" as MasteryLevel },
+      { name: "Jenny Bautista",  score: "26/40", level: "average" as MasteryLevel },
+      { name: "Kevin Morales",   score: "27/40", level: "average" as MasteryLevel },
     ],
   },
   {
     key: "no-gap",
     label: "no critical gaps",
-    count: 25,
+    count: 19,
     noGap: true,
     students: [
-      { name: "Maria Santos",    score: "32/35", level: "mastered" as MasteryLevel },
-      { name: "Jose Reyes",      score: "33/35", level: "mastered" as MasteryLevel },
-      { name: "Ana Garcia",      score: "35/35", level: "mastered" as MasteryLevel },
-      { name: "Luis Fernandez",  score: "31/35", level: "mastered" as MasteryLevel },
-      { name: "Rosa Mendez",     score: "30/35", level: "mastered" as MasteryLevel },
-      { name: "Diego Ramos",     score: "29/35", level: "good" as MasteryLevel },
-      { name: "Elena Cruz",      score: "31/35", level: "mastered" as MasteryLevel },
-      { name: "Marco Santos",    score: "32/35", level: "mastered" as MasteryLevel },
-      { name: "Carla Reyes",     score: "33/35", level: "mastered" as MasteryLevel },
-      { name: "Noel Flores",     score: "30/35", level: "mastered" as MasteryLevel },
-      { name: "Bianca Lopez",    score: "29/35", level: "good" as MasteryLevel },
-      { name: "Paolo Dela Cruz", score: "31/35", level: "mastered" as MasteryLevel },
-      { name: "Jenny Bautista",  score: "30/35", level: "mastered" as MasteryLevel },
-      { name: "Kevin Morales",   score: "32/35", level: "mastered" as MasteryLevel },
-      { name: "Trish Ocampo",    score: "29/35", level: "good" as MasteryLevel },
-      { name: "Sam Hernandez",   score: "33/35", level: "mastered" as MasteryLevel },
-      { name: "Nina Pascual",    score: "31/35", level: "mastered" as MasteryLevel },
-      { name: "Gio Esguerra",    score: "30/35", level: "mastered" as MasteryLevel },
-      { name: "Mia Salazar",     score: "32/35", level: "mastered" as MasteryLevel },
-      { name: "Jan Santos",      score: "31/35", level: "mastered" as MasteryLevel },
-      { name: "Rex Ignacio",     score: "29/35", level: "good" as MasteryLevel },
-      { name: "Cath Buenaventura", score: "30/35", level: "mastered" as MasteryLevel },
-      { name: "Ric Magbanua",    score: "33/35", level: "mastered" as MasteryLevel },
-      { name: "Pia Bonifacio",   score: "35/35", level: "mastered" as MasteryLevel },
-      { name: "Ed dela Rosa",    score: "31/35", level: "mastered" as MasteryLevel },
+      { name: "Luis Fernandez",  score: "33/40", level: "mastered" as MasteryLevel },
+      { name: "Rosa Mendez",     score: "32/40", level: "mastered" as MasteryLevel },
+      { name: "Diego Ramos",     score: "30/40", level: "good"     as MasteryLevel },
+      { name: "Elena Cruz",      score: "31/40", level: "mastered" as MasteryLevel },
+      { name: "Marco Santos",    score: "34/40", level: "mastered" as MasteryLevel },
+      { name: "Carla Reyes",     score: "33/40", level: "mastered" as MasteryLevel },
+      { name: "Noel Flores",     score: "30/40", level: "mastered" as MasteryLevel },
+      { name: "Bianca Lopez",    score: "29/40", level: "good"     as MasteryLevel },
+      { name: "Trish Ocampo",    score: "29/40", level: "good"     as MasteryLevel },
+      { name: "Sam Hernandez",   score: "33/40", level: "mastered" as MasteryLevel },
+      { name: "Nina Pascual",    score: "31/40", level: "mastered" as MasteryLevel },
+      { name: "Gio Esguerra",    score: "30/40", level: "mastered" as MasteryLevel },
+      { name: "Mia Salazar",     score: "32/40", level: "mastered" as MasteryLevel },
+      { name: "Jan Santos",      score: "31/40", level: "mastered" as MasteryLevel },
+      { name: "Rex Ignacio",     score: "29/40", level: "good"     as MasteryLevel },
+      { name: "Cath Buenaventura", score: "30/40", level: "mastered" as MasteryLevel },
+      { name: "Ric Magbanua",    score: "33/40", level: "mastered" as MasteryLevel },
+      { name: "Pia Bonifacio",   score: "36/40", level: "mastered" as MasteryLevel },
+      { name: "Ed dela Rosa",    score: "31/40", level: "mastered" as MasteryLevel },
     ],
   },
+]
+
+const CHEM_SUBTOPICS = [
+  { name: "Polyatomic ions",        pct: 43, level: "critical"  as MasteryLevel },
+  { name: "Coefficient rules",      pct: 47, level: "critical"  as MasteryLevel },
+  { name: "Conservation of mass",   pct: 54, level: "remedial"  as MasteryLevel },
+  { name: "Displacement reactions", pct: 57, level: "remedial"  as MasteryLevel },
+  { name: "Decomposition reactions",pct: 63, level: "remedial"  as MasteryLevel },
+  { name: "Synthesis reactions",    pct: 71, level: "average"   as MasteryLevel },
+  { name: "Metallic bonds",         pct: 72, level: "average"   as MasteryLevel },
+  { name: "Ionic bonds",            pct: 79, level: "good"      as MasteryLevel },
+  { name: "Covalent bonds",         pct: 82, level: "good"      as MasteryLevel },
+]
+
+const GEN_MESSAGES = [
+  "Analyzing diagnostic data…",
+  "Identifying weak subtopics…",
+  "Crafting targeted questions…",
+  "Building remediation exam…",
 ]
 
 // ── Small reusable components ──────────────────────────────────
@@ -272,10 +322,7 @@ function StatCard({
 }) {
   return (
     <div className="bg-white rounded-[14px] border border-border-light shadow-card p-5 flex items-center gap-4">
-      <div
-        className="w-12 h-12 rounded-[12px] flex items-center justify-center shrink-0"
-        style={{ backgroundColor: color + "20" }}
-      >
+      <div className="w-12 h-12 rounded-[12px] flex items-center justify-center shrink-0" style={{ backgroundColor: color + "20" }}>
         <Icon className="w-6 h-6" style={{ color }} strokeWidth={1.75} />
       </div>
       <div>
@@ -287,7 +334,7 @@ function StatCard({
   )
 }
 
-// ── Score distribution chart ───────────────────────────────────
+// ── Score distribution ─────────────────────────────────────────
 
 function ScoreDistributionChart() {
   return (
@@ -295,22 +342,9 @@ function ScoreDistributionChart() {
       <h3 className="font-display font-semibold text-base text-ink-primary mb-4">Score Distribution</h3>
       <ResponsiveContainer width="100%" height={200}>
         <BarChart data={SCORE_DIST} barSize={36}>
-          <XAxis
-            dataKey="band"
-            tick={{ fontSize: 11, fill: "#8E8E9E" }}
-            axisLine={false}
-            tickLine={false}
-          />
-          <YAxis
-            tick={{ fontSize: 11, fill: "#8E8E9E" }}
-            axisLine={false}
-            tickLine={false}
-            allowDecimals={false}
-          />
-          <Tooltip
-            cursor={{ fill: "rgba(0,0,0,0.04)" }}
-            contentStyle={{ borderRadius: 10, border: "1px solid #E8E6E1", fontSize: 12 }}
-          />
+          <XAxis dataKey="band" tick={{ fontSize: 11, fill: "#8E8E9E" }} axisLine={false} tickLine={false} />
+          <YAxis tick={{ fontSize: 11, fill: "#8E8E9E" }} axisLine={false} tickLine={false} allowDecimals={false} />
+          <Tooltip cursor={{ fill: "rgba(0,0,0,0.04)" }} contentStyle={{ borderRadius: 10, border: "1px solid #E8E6E1", fontSize: 12 }} />
           <Bar dataKey="count" radius={[6, 6, 0, 0]}>
             {SCORE_DIST.map((entry) => (
               <Cell key={entry.band} fill={BAND_COLORS[entry.band] ?? "#8E8E9E"} />
@@ -330,59 +364,39 @@ function MasteryHeatmap() {
 
   const toggle = (parent: string) => {
     setExpandedParents((prev) => {
-      const next = new Set(prev)
-      next.has(parent) ? next.delete(parent) : next.add(parent)
-      return next
+      const next = new Set(prev); next.has(parent) ? next.delete(parent) : next.add(parent); return next
     })
     setActiveSubtopic(null)
   }
 
   const sorted = [...TOPIC_GROUPS].sort((a, b) => a.avg_pct - b.avg_pct)
 
-  const legend = (
-    <div className="flex items-center gap-3 text-[11px] font-body text-ink-tertiary flex-wrap">
-      <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-[#EF5350] inline-block" /> &lt;50% · Reteach</span>
-      <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-[#FFCA28] inline-block" /> 50–79% · Partial</span>
-      <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-[#66BB6A] inline-block" /> 80%+ · Strong</span>
-    </div>
-  )
-
   return (
     <div className="bg-white rounded-[14px] border border-border-light shadow-card p-5">
       <div className="flex items-start justify-between gap-3 mb-3 flex-wrap">
         <h3 className="font-display font-semibold text-base text-ink-primary">Subtopic Mastery</h3>
-        {legend}
+        <div className="flex items-center gap-3 text-[11px] font-body text-ink-tertiary flex-wrap">
+          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-[#EF5350] inline-block" /> &lt;50% · Reteach</span>
+          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-[#FFCA28] inline-block" /> 50–79% · Partial</span>
+          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-[#66BB6A] inline-block" /> 80%+ · Strong</span>
+        </div>
       </div>
-
       <div className="space-y-2">
         {sorted.map((group) => {
           const c = heatmapColor(group.avg_pct)
           const isExpanded = expandedParents.has(group.parent)
-
           return (
-            <div
-              key={group.parent}
-              className="rounded-[10px] border-2 overflow-hidden transition-all"
-              style={{ borderColor: isExpanded ? c.border : c.border + "44" }}
-            >
-              {/* Parent row */}
+            <div key={group.parent} className="rounded-[10px] border-2 overflow-hidden" style={{ borderColor: isExpanded ? c.border : c.border + "44" }}>
               <button
                 onClick={() => toggle(group.parent)}
-                className="w-full flex items-center gap-3 px-3.5 py-2.5 transition-colors text-left"
+                className="w-full flex items-center gap-3 px-3.5 py-2.5 text-left"
                 style={{ backgroundColor: c.bg }}
               >
-                <span className="font-display font-bold text-xl leading-none w-14 shrink-0" style={{ color: c.text }}>
-                  {group.avg_pct}%
-                </span>
+                <span className="font-display font-bold text-xl leading-none w-14 shrink-0" style={{ color: c.text }}>{group.avg_pct}%</span>
                 <span className="font-display font-semibold text-[13px] flex-1 text-ink-primary">{group.parent}</span>
                 <span className="text-[11px] font-body text-ink-tertiary shrink-0">{group.subtopics.length} subtopics</span>
-                {isExpanded
-                  ? <ChevronUp className="w-4 h-4 shrink-0" style={{ color: c.text }} />
-                  : <ChevronDown className="w-4 h-4 shrink-0" style={{ color: c.text }} />
-                }
+                {isExpanded ? <ChevronUp className="w-4 h-4 shrink-0" style={{ color: c.text }} /> : <ChevronDown className="w-4 h-4 shrink-0" style={{ color: c.text }} />}
               </button>
-
-              {/* Expanded subtopic cells */}
               {isExpanded && (
                 <div className="px-3.5 pb-3 pt-2 border-t" style={{ borderColor: c.border + "33", backgroundColor: c.bg + "55" }}>
                   <div className="flex gap-1.5 overflow-x-auto pb-1">
@@ -393,19 +407,11 @@ function MasteryHeatmap() {
                         <button
                           key={sub.name}
                           onClick={() => setActiveSubtopic(isActive ? null : sub.name)}
-                          className="flex flex-col items-center gap-1 shrink-0 rounded-[8px] border-2 px-2.5 py-2 transition-all min-w-[72px]"
-                          style={{
-                            backgroundColor: sc.bg,
-                            borderColor: isActive ? sc.border : sc.border + "55",
-                            boxShadow: isActive ? `0 0 0 3px ${sc.border}33` : undefined,
-                          }}
+                          className="flex flex-col items-center gap-1 shrink-0 rounded-[8px] border-2 px-2.5 py-2 min-w-[72px]"
+                          style={{ backgroundColor: sc.bg, borderColor: isActive ? sc.border : sc.border + "55", boxShadow: isActive ? `0 0 0 3px ${sc.border}33` : undefined }}
                         >
-                          <span className="font-display font-bold text-lg leading-none" style={{ color: sc.text }}>
-                            {sub.pct}%
-                          </span>
-                          <span className="text-[10px] font-body text-center leading-tight line-clamp-2" style={{ color: sc.text + "CC" }}>
-                            {sub.name.split(/[\s,–-]+/).slice(0, 2).join(" ")}
-                          </span>
+                          <span className="font-display font-bold text-lg leading-none" style={{ color: sc.text }}>{sub.pct}%</span>
+                          <span className="text-[10px] font-body text-center leading-tight line-clamp-2" style={{ color: sc.text + "CC" }}>{sub.name.split(/[\s,–-]+/).slice(0, 2).join(" ")}</span>
                         </button>
                       )
                     })}
@@ -436,7 +442,6 @@ function ReteachPanel() {
 
   const toggleParent = (p: string) =>
     setExpandedParents((prev) => { const n = new Set(prev); n.has(p) ? n.delete(p) : n.add(p); return n })
-
   const toggleSub = (s: string) =>
     setExpandedSubtopics((prev) => { const n = new Set(prev); n.has(s) ? n.delete(s) : n.add(s); return n })
 
@@ -447,34 +452,25 @@ function ReteachPanel() {
         {RETEACH_TOPICS.map((group) => {
           const c = MASTERY_COLORS[group.level]
           const isExpanded = expandedParents.has(group.parent)
-
           return (
             <div key={group.parent} className="rounded-[10px] border overflow-hidden" style={{ borderColor: c.border + "55" }}>
               <button
                 onClick={() => toggleParent(group.parent)}
-                className="w-full flex items-center gap-3 px-4 py-3 text-left transition-colors hover:opacity-90"
+                className="w-full flex items-center gap-3 px-4 py-3 text-left hover:opacity-90"
                 style={{ backgroundColor: c.bg + "55" }}
               >
                 <span className="font-display font-bold text-[15px] flex-1 text-ink-primary">{group.parent}</span>
                 <span className="font-display font-semibold text-[13px]" style={{ color: c.text }}>{group.avg_pct}% avg</span>
-                <span className="text-[11px] font-body text-ink-tertiary">{group.subtopics.length} subtopic{group.subtopics.length !== 1 ? "s" : ""}</span>
-                {isExpanded
-                  ? <ChevronUp className="w-4 h-4 shrink-0 text-ink-tertiary" />
-                  : <ChevronDown className="w-4 h-4 shrink-0 text-ink-tertiary" />
-                }
+                <span className="text-[11px] font-body text-ink-tertiary">{group.subtopics.length} subtopics</span>
+                {isExpanded ? <ChevronUp className="w-4 h-4 shrink-0 text-ink-tertiary" /> : <ChevronDown className="w-4 h-4 shrink-0 text-ink-tertiary" />}
               </button>
-
               {isExpanded && (
                 <div className="px-4 pb-4 pt-3 space-y-3 border-t" style={{ borderColor: c.border + "33" }}>
                   {group.subtopics.map((sub) => {
                     const sc = MASTERY_COLORS[sub.level]
                     const isOpen = expandedSubtopics.has(sub.name)
                     return (
-                      <div
-                        key={sub.name}
-                        className="rounded-[10px] border-l-4 p-4 space-y-2"
-                        style={{ borderColor: sc.border, backgroundColor: sc.bg + "55" }}
-                      >
+                      <div key={sub.name} className="rounded-[10px] border-l-4 p-4 space-y-2" style={{ borderColor: sc.border, backgroundColor: sc.bg + "55" }}>
                         <div className="flex items-center justify-between flex-wrap gap-2">
                           <span className="font-display font-semibold text-[13px] text-ink-primary">{sub.name}</span>
                           <span className="font-display font-bold text-sm" style={{ color: sc.text }}>{sub.pct}% avg</span>
@@ -492,16 +488,18 @@ function ReteachPanel() {
                           {isOpen ? "Hide" : "Show"} explanation · 3 related questions
                         </button>
                         {isOpen && (
-                          <div className="space-y-2">
-                            <div className="text-[12px] font-body text-ink-secondary bg-white/80 rounded-[8px] px-3 py-2.5 leading-relaxed border border-border-light">
-                              <p className="font-semibold text-[10px] text-ink-tertiary uppercase tracking-wide mb-1">Correct Explanation</p>
-                              {sub.name === "Graphical method"
-                                ? "To find the intersection of two lines, rewrite both in slope-intercept form (y = mx + b). Plot each line carefully from the y-intercept, then count rise/run for the slope. The intersection is where both lines cross."
-                                : sub.name === "Elimination method"
-                                ? "To use elimination, multiply one or both equations so that adding or subtracting them cancels one variable. Be careful to distribute the multiplication factor to every term, including the constant, before adding the equations."
-                                : "Apply the quadratic formula: x = (−b ± √(b²−4ac)) / 2a. Always square b first before making it negative — (−b)² is always positive. Compute the discriminant b²−4ac carefully to determine the number of solutions."
-                              }
-                            </div>
+                          <div className="text-[12px] font-body text-ink-secondary bg-white/80 rounded-[8px] px-3 py-2.5 leading-relaxed border border-border-light">
+                            <p className="font-semibold text-[10px] text-ink-tertiary uppercase tracking-wide mb-1">Correct Explanation</p>
+                            {sub.name === "Polyatomic ions"
+                              ? "When balancing equations with polyatomic ions (e.g., SO₄²⁻, NO₃⁻), treat the entire ion as one unit. If the ion appears unchanged on both sides, balance it as a group rather than counting individual atoms. Only break the ion apart if it splits between products."
+                              : sub.name === "Coefficient rules"
+                              ? "To balance a chemical equation, only add coefficients (numbers in front of the chemical formula) — never change subscripts inside the formula. Changing subscripts changes the substance itself. Coefficients tell how many molecules of each substance are involved."
+                              : sub.name === "Conservation of mass"
+                              ? "After placing each coefficient, count all atoms of every element on both sides to verify they are equal. Work systematically: balance one element at a time, then recount everything. The equation is balanced only when all elements match."
+                              : sub.name === "Displacement reactions"
+                              ? "In single displacement, a more reactive element replaces a less reactive one in a compound (A + BC → AC + B). Use the activity series to determine which element is more reactive. In double displacement, both compounds exchange ions (AB + CD → AD + CB)."
+                              : "In decomposition, one compound breaks down into two or more simpler substances. The number of products depends on the compound: binary compounds (like H₂O) produce two elements; others may produce three or more products including gases."
+                            }
                           </div>
                         )}
                       </div>
@@ -529,20 +527,13 @@ function AtRiskPanel() {
       <div className="flex items-center gap-2 mb-4">
         <AlertTriangle className="w-4 h-4 text-danger-500" strokeWidth={2} />
         <h3 className="font-display font-semibold text-base text-ink-primary">At-Risk Students</h3>
-        <span className="ml-0.5 text-[13px] font-body text-danger-500 font-semibold">
-          · {AT_RISK_STUDENTS.length} flagged
-        </span>
+        <span className="ml-0.5 text-[13px] font-body text-danger-500 font-semibold">· {AT_RISK_STUDENTS.length} flagged</span>
       </div>
-
       <div className="space-y-3">
         {AT_RISK_STUDENTS.map((s) => {
-          const trendLabel =
-            s.pct < 40 ? "Critical — well below passing" :
-            s.pct < 60 ? "Below passing threshold" :
-            "Just below class average"
+          const trendLabel = s.pct < 40 ? "Critical — well below passing" : s.pct < 60 ? "Below passing threshold" : "Just below class average"
           const trendColor = s.pct < 40 ? "#C62828" : s.pct < 60 ? "#E65100" : "#8B7500"
           const isExpanded = expanded.has(s.id)
-
           return (
             <div key={s.id} className="rounded-[10px] border border-[#FFCDD2] bg-[#FFEBEE]/30 overflow-hidden">
               <div className="flex items-start gap-3 p-3.5">
@@ -551,7 +542,6 @@ function AtRiskPanel() {
                     {s.name.split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase()}
                   </span>
                 </div>
-
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap mb-0.5">
                     <span className="font-display font-semibold text-[14px] text-ink-primary">{s.name}</span>
@@ -565,20 +555,15 @@ function AtRiskPanel() {
                     {s.weakIn.map((w) => (
                       <span key={w} className="text-[11px] font-body font-medium px-2 py-0.5 rounded-full bg-[#FFEBEE] text-danger-700">{w}</span>
                     ))}
-                    <button
-                      onClick={() => toggle(s.id)}
-                      className="text-[11px] font-body text-ink-tertiary hover:text-ink-primary transition-colors"
-                    >
+                    <button onClick={() => toggle(s.id)} className="text-[11px] font-body text-ink-tertiary hover:text-ink-primary transition-colors">
                       {isExpanded ? "hide detail" : "see subtopics"}
                     </button>
                   </div>
                 </div>
-
                 <button className="shrink-0 px-3 py-1.5 rounded-[8px] bg-primary-500 hover:bg-primary-600 text-white text-[11px] font-semibold font-body transition-colors">
                   Re-Assess
                 </button>
               </div>
-
               {isExpanded && (
                 <div className="border-t border-[#FFCDD2]/50 px-3.5 pb-3 pt-2 flex flex-wrap gap-1.5">
                   {s.subtopics.map((sub) => (
@@ -633,12 +618,8 @@ function StudentClusters() {
                     <span className="text-danger-600 font-medium">{cluster.label}</span>
                   )}
                 </p>
-                {isOpen
-                  ? <ChevronUp className="w-4 h-4 text-ink-tertiary shrink-0" />
-                  : <ChevronDown className="w-4 h-4 text-ink-tertiary shrink-0" />
-                }
+                {isOpen ? <ChevronUp className="w-4 h-4 text-ink-tertiary shrink-0" /> : <ChevronDown className="w-4 h-4 text-ink-tertiary shrink-0" />}
               </button>
-
               {isOpen && (
                 <div className={`border-t border-border-light divide-y divide-border-light/60 ${cluster.noGap ? "bg-green-50/30" : "bg-[#FFEBEE]/10"}`}>
                   {cluster.students.map((s) => (
@@ -665,7 +646,6 @@ function ReviewerPanel({ onClose }: { onClose: () => void }) {
     <div className="fixed inset-0 z-50 flex">
       <div className="flex-1 bg-black/30 backdrop-blur-sm" onClick={onClose} />
       <div className="w-full max-w-[480px] bg-white shadow-2xl flex flex-col h-full overflow-hidden">
-        {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-border-light shrink-0">
           <div className="flex items-center gap-2">
             <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center">
@@ -679,24 +659,22 @@ function ReviewerPanel({ onClose }: { onClose: () => void }) {
         </div>
 
         <div className="overflow-y-auto flex-1 px-6 py-5 space-y-5">
-          {/* Overall */}
-          <div className="rounded-[12px] bg-[#E3F2FD] border border-[#90CAF9] p-4">
-            <p className="font-display font-semibold text-[13px] text-[#1565C0] mb-1">Overall Performance</p>
-            <p className="font-body text-[13px] text-[#1A237E] leading-relaxed">
-              Strong class performance with <strong>88% mastery</strong> and <strong>91% average score</strong>. Most students have solid command of Linear Equations, but Systems of Equations remains a clear gap that needs targeted reteaching before advancing.
+          <div className="rounded-[12px] bg-[#FFEBEE] border border-[#FFCDD2] p-4">
+            <p className="font-display font-semibold text-[13px] text-danger-700 mb-1">Overall Performance</p>
+            <p className="font-body text-[13px] text-danger-800 leading-relaxed">
+              Below-average class performance with <strong>58% mastery</strong> and <strong>68% average score</strong>. Balancing Equations is a critical gap affecting the majority of students and will block progress in Stoichiometry if not addressed immediately.
             </p>
           </div>
 
-          {/* Key findings */}
           <div>
             <p className="font-display font-semibold text-[13px] text-ink-primary mb-2">Key Findings</p>
             <ul className="space-y-2">
               {[
-                { color: "#2E7D32", bg: "#E8F5E9", text: "25 of 35 students (71%) are ready to advance to the next unit." },
-                { color: "#2E7D32", bg: "#E8F5E9", text: "Only 3 students (9%) scored below 60% — targeted support is sufficient, no full reteach needed." },
-                { color: "#2E7D32", bg: "#E8F5E9", text: "Linear Equations averaged 91% — students show strong procedural fluency." },
-                { color: "#E65100", bg: "#FFF3E0", text: "Systems of Equations averaged 63% — Graphical Method (59%) and Elimination (63%) need focused intervention." },
-                { color: "#F57F17", bg: "#FFF8E1", text: "Quadratic formula (71%) shows partial understanding — students can set it up but make sign errors in the discriminant." },
+                { color: "#C62828", bg: "#FFEBEE", text: "11 students (31%) scored below 60% — immediate full reteach intervention needed." },
+                { color: "#C62828", bg: "#FFEBEE", text: "Balancing Equations averaged only 49% — polyatomic ions (43%) is the most critical gap and a foundational concept." },
+                { color: "#E65100", bg: "#FFF3E0", text: "Reaction Types averaged 61% — displacement reactions (57%) and decomposition (63%) need targeted review." },
+                { color: "#2E7D32", bg: "#E8F5E9", text: "Chemical Bonding averaged 78% — theoretical concepts are well-understood; this is a relative strength." },
+                { color: "#E65100", bg: "#FFF3E0", text: "Only 19 of 32 students (59%) are ready to advance to Stoichiometry without additional support." },
               ].map((item, i) => (
                 <li key={i} className="flex items-start gap-2.5 rounded-[8px] px-3 py-2.5" style={{ backgroundColor: item.bg }}>
                   <span className="w-1.5 h-1.5 rounded-full shrink-0 mt-1.5" style={{ backgroundColor: item.color }} />
@@ -706,38 +684,36 @@ function ReviewerPanel({ onClose }: { onClose: () => void }) {
             </ul>
           </div>
 
-          {/* Priority action */}
           <div className="rounded-[12px] border border-[#FFCDD2] bg-[#FFEBEE]/40 p-4">
             <p className="font-display font-semibold text-[13px] text-danger-700 mb-1.5">Priority Action</p>
             <p className="font-body text-[13px] text-danger-800 leading-relaxed">
-              Schedule a small-group pull-out session focused on <strong>Systems of Equations</strong> before advancing to Inequalities. <strong>Juan dela Cruz</strong> and <strong>Carlos Mendoza</strong> need individual one-on-one intervention.
+              Dedicate <strong>2–3 class sessions</strong> to Balancing Equations before moving to Stoichiometry. Use hands-on balance activities to reinforce conservation of mass, then reintroduce coefficient rules and polyatomic ions. <strong>Maria Santos</strong> and <strong>Jose Reyes</strong> require immediate one-on-one sessions.
             </p>
           </div>
 
-          {/* Grouping */}
           <div>
             <p className="font-display font-semibold text-[13px] text-ink-primary mb-2">Recommended Grouping</p>
             <div className="space-y-2">
               {[
                 {
-                  label: "Group 1 — Individual Intervention",
-                  count: "3 students",
-                  names: "Juan dela Cruz, Carlos Mendoza, Pedro Bautista",
-                  focus: "Systems + Quadratic Equations",
+                  label: "Group 1 — Full Reteach",
+                  count: "5 students",
+                  names: "Maria Santos, Jose Reyes, Ana Garcia, Andres Torres, Sofia Villanueva",
+                  focus: "Balancing Equations + Reaction Types — start from conservation of mass",
                   color: "#C62828", bg: "#FFEBEE",
                 },
                 {
                   label: "Group 2 — Targeted Practice",
-                  count: "7 students",
-                  names: "Sofia Villanueva + 6 others",
-                  focus: "Quadratic formula reinforcement",
+                  count: "8 students",
+                  names: "Tina Soriano + 7 others",
+                  focus: "Balancing Equations only — coefficient rules and polyatomic ions",
                   color: "#E65100", bg: "#FFF3E0",
                 },
                 {
                   label: "Group 3 — Ready to Advance",
-                  count: "25 students",
+                  count: "19 students",
                   names: "Remaining class",
-                  focus: "Enrichment — apply equations to real-world word problems",
+                  focus: "Proceed to Stoichiometry with brief review of displacement reactions",
                   color: "#2E7D32", bg: "#E8F5E9",
                 },
               ].map((g) => (
@@ -760,40 +736,15 @@ function ReviewerPanel({ onClose }: { onClose: () => void }) {
 
 // ── Re-assess Modal ────────────────────────────────────────────
 
-const ALGEBRA_SUBTOPICS = [
-  { name: "Graphical method",    pct: 59, level: "remedial"  as MasteryLevel },
-  { name: "Elimination method",  pct: 63, level: "remedial"  as MasteryLevel },
-  { name: "Substitution method", pct: 68, level: "average"   as MasteryLevel },
-  { name: "Quadratic formula",   pct: 71, level: "average"   as MasteryLevel },
-  { name: "Factoring",           pct: 76, level: "average"   as MasteryLevel },
-  { name: "Two-step equations",  pct: 88, level: "good"      as MasteryLevel },
-  { name: "Standard form",       pct: 82, level: "good"      as MasteryLevel },
-  { name: "One-step equations",  pct: 91, level: "mastered"  as MasteryLevel },
-  { name: "Solving for x",       pct: 94, level: "mastered"  as MasteryLevel },
-]
-
-const GEN_MESSAGES = [
-  "Analyzing diagnostic data…",
-  "Identifying weak subtopics…",
-  "Crafting targeted questions…",
-  "Building remediation exam…",
-]
-
 function ReassessModal({ onClose }: { onClose: () => void }) {
   const [selected, setSelected] = useState<Set<string>>(
-    new Set(["Graphical method", "Elimination method", "Quadratic formula"])
+    new Set(["Polyatomic ions", "Coefficient rules", "Conservation of mass", "Displacement reactions"])
   )
-  const [questionCount, setQuestionCount] = useState(10)
+  const [questionCount, setQuestionCount] = useState(12)
   const [difficulty, setDifficulty] = useState("medium")
   const [generating, setGenerating] = useState(false)
   const [msgIdx, setMsgIdx] = useState(0)
   const [done, setDone] = useState(false)
-
-  useState(() => {
-    if (!generating) return
-    const t = setInterval(() => setMsgIdx((i) => (i + 1) % GEN_MESSAGES.length), 2500)
-    return () => clearInterval(t)
-  })
 
   const toggle = (s: string) =>
     setSelected((prev) => { const n = new Set(prev); n.has(s) ? n.delete(s) : n.add(s); return n })
@@ -802,18 +753,12 @@ function ReassessModal({ onClose }: { onClose: () => void }) {
     setGenerating(true)
     let idx = 0
     const t = setInterval(() => { idx++; setMsgIdx(idx % GEN_MESSAGES.length) }, 2500)
-    setTimeout(() => {
-      clearInterval(t)
-      setGenerating(false)
-      setDone(true)
-    }, 8000)
+    setTimeout(() => { clearInterval(t); setGenerating(false); setDone(true) }, 8000)
   }
 
   return (
     <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center sm:p-4">
       <div className="bg-white rounded-t-[20px] sm:rounded-[20px] shadow-2xl w-full sm:max-w-[540px] max-h-[90vh] flex flex-col relative">
-
-        {/* Generating overlay */}
         {generating && (
           <div className="absolute inset-0 bg-white/95 rounded-[20px] z-10 flex flex-col items-center justify-center gap-4">
             <div className="w-14 h-14 rounded-full bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center">
@@ -825,8 +770,6 @@ function ReassessModal({ onClose }: { onClose: () => void }) {
             </div>
           </div>
         )}
-
-        {/* Done overlay */}
         {done && (
           <div className="absolute inset-0 bg-white/95 rounded-[20px] z-10 flex flex-col items-center justify-center gap-4">
             <div className="w-14 h-14 rounded-full bg-[#E8F5E9] flex items-center justify-center">
@@ -835,85 +778,61 @@ function ReassessModal({ onClose }: { onClose: () => void }) {
             <div className="text-center">
               <p className="font-display font-semibold text-lg text-ink-primary">Re-Assessment Created!</p>
               <p className="font-body text-sm text-ink-secondary mt-1">
-                {selected.size} subtopic{selected.size !== 1 ? "s" : ""} · {questionCount} questions · {difficulty}
+                {selected.size} subtopics · {questionCount} questions · {difficulty}
               </p>
             </div>
-            <button
-              onClick={onClose}
-              className="mt-2 px-6 py-2 rounded-[10px] bg-primary-500 text-white text-sm font-semibold font-body hover:bg-primary-600 transition-colors"
-            >
-              Done
-            </button>
+            <button onClick={onClose} className="mt-2 px-6 py-2 rounded-[10px] bg-primary-500 text-white text-sm font-semibold font-body hover:bg-primary-600 transition-colors">Done</button>
           </div>
         )}
 
-        {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-border-light shrink-0">
           <div className="flex items-center gap-2">
             <Zap className="w-5 h-5 text-primary-500" strokeWidth={1.75} />
             <h2 className="font-display font-semibold text-lg text-ink-primary">Generate Re-Assessment</h2>
           </div>
-          <button onClick={onClose} className="text-ink-tertiary hover:text-ink-primary transition-colors">
-            <X className="w-5 h-5" />
-          </button>
+          <button onClick={onClose} className="text-ink-tertiary hover:text-ink-primary transition-colors"><X className="w-5 h-5" /></button>
         </div>
 
         <div className="overflow-y-auto flex-1 px-6 py-5 space-y-5">
-          {/* Summary */}
           <div className="grid grid-cols-2 gap-3">
             <div className="bg-[#E8F5E9] rounded-[10px] p-3">
               <p className="font-body text-[11px] text-[#2D8A4E] uppercase tracking-wide mb-0.5">Ready for Next Unit</p>
-              <p className="font-display font-bold text-xl text-[#2D8A4E]">88%</p>
+              <p className="font-display font-bold text-xl text-[#2D8A4E]">58%</p>
             </div>
             <div className="bg-[#FFEBEE] rounded-[10px] p-3">
               <p className="font-body text-[11px] text-danger-500 uppercase tracking-wide mb-0.5">Need Intervention</p>
-              <p className="font-display font-bold text-xl text-danger-500">9%</p>
+              <p className="font-display font-bold text-xl text-danger-500">41%</p>
             </div>
           </div>
 
-          {/* Subtopics */}
           <div>
             <p className="font-display font-semibold text-sm text-ink-primary mb-2">
-              Target Subtopics{" "}
-              <span className="font-body font-normal text-ink-tertiary text-[12px]">({selected.size} selected)</span>
+              Target Subtopics <span className="font-body font-normal text-ink-tertiary text-[12px]">({selected.size} selected)</span>
             </p>
             <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
-              {ALGEBRA_SUBTOPICS.map((sub) => {
+              {CHEM_SUBTOPICS.map((sub) => {
                 const c = MASTERY_COLORS[sub.level]
                 const isSel = selected.has(sub.name)
                 return (
                   <label
                     key={sub.name}
-                    className={`flex items-center gap-3 p-3 rounded-[10px] border cursor-pointer transition-all ${
-                      isSel ? "border-primary-500 bg-primary-50" : "border-border-light bg-surface-secondary hover:border-primary-300"
-                    }`}
+                    className={`flex items-center gap-3 p-3 rounded-[10px] border cursor-pointer transition-all ${isSel ? "border-primary-500 bg-primary-50" : "border-border-light bg-surface-secondary hover:border-primary-300"}`}
                   >
-                    <input
-                      type="checkbox"
-                      checked={isSel}
-                      onChange={() => toggle(sub.name)}
-                      className="w-4 h-4 rounded accent-primary-500"
-                    />
+                    <input type="checkbox" checked={isSel} onChange={() => toggle(sub.name)} className="w-4 h-4 rounded accent-primary-500" />
                     <span className="font-body text-sm text-ink-primary flex-1 truncate">{sub.name}</span>
                     <span className="font-display font-semibold text-[13px]" style={{ color: c.text }}>{sub.pct}%</span>
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold capitalize" style={{ backgroundColor: c.bg, color: c.text }}>
-                      {sub.level}
-                    </span>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold capitalize" style={{ backgroundColor: c.bg, color: c.text }}>{sub.level}</span>
                   </label>
                 )
               })}
             </div>
           </div>
 
-          {/* Settings */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <label className="text-[13px] font-medium text-ink-secondary font-body">Question Count</label>
               <input
-                type="number"
-                min={3}
-                max={30}
-                value={questionCount}
+                type="number" min={3} max={30} value={questionCount}
                 onChange={(e) => setQuestionCount(Math.max(3, Math.min(30, Number(e.target.value))))}
                 className="w-full h-[42px] px-[14px] text-sm font-body text-ink-primary bg-white border border-border-default rounded-[10px] focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-colors text-center"
               />
@@ -921,8 +840,7 @@ function ReassessModal({ onClose }: { onClose: () => void }) {
             <div className="space-y-1.5">
               <label className="text-[13px] font-medium text-ink-secondary font-body">Difficulty</label>
               <select
-                value={difficulty}
-                onChange={(e) => setDifficulty(e.target.value)}
+                value={difficulty} onChange={(e) => setDifficulty(e.target.value)}
                 className="w-full h-[42px] px-[14px] text-sm font-body text-ink-primary bg-white border border-border-default rounded-[10px] focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-colors"
               >
                 <option value="easy">Easy</option>
@@ -950,7 +868,7 @@ function ReassessModal({ onClose }: { onClose: () => void }) {
 
 // ── Page ───────────────────────────────────────────────────────
 
-export default function DemoAssessmentPage() {
+export default function DemoChemistryPage() {
   const router = useRouter()
   const [showReviewer, setShowReviewer] = useState(false)
   const [showReassess, setShowReassess] = useState(false)
@@ -971,18 +889,18 @@ export default function DemoAssessmentPage() {
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
             <h1 className="font-display font-bold text-[24px] md:text-[28px] text-ink-primary leading-tight">
-              Algebra Equations
+              Chemical Reactions Lab Exam
             </h1>
             <div className="flex items-center gap-2 mt-2 flex-wrap">
               <span className="text-[13px] font-body text-ink-secondary">Grade 10 — Luna</span>
               <span className="text-ink-tertiary text-xs">·</span>
-              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium font-body bg-primary-50 text-primary-600">Math</span>
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium font-body bg-primary-50 text-primary-600">Science</span>
               <span className="text-ink-tertiary text-xs">·</span>
-              <span className="text-[12px] font-body text-ink-tertiary">Feb 22, 2025</span>
+              <span className="text-[12px] font-body text-ink-tertiary">Mar 5, 2025</span>
               <span className="text-ink-tertiary text-xs">·</span>
-              <span className="text-[12px] font-body text-ink-tertiary capitalize">Medium</span>
+              <span className="text-[12px] font-body text-ink-tertiary capitalize">Hard</span>
               <span className="text-ink-tertiary text-xs">·</span>
-              <span className="text-[12px] font-body text-ink-tertiary">35 questions</span>
+              <span className="text-[12px] font-body text-ink-tertiary">40 questions</span>
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0 flex-wrap">
@@ -1017,10 +935,10 @@ export default function DemoAssessmentPage() {
 
       {/* Stat cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard label="Avg Score"      value="91%"  sub="class average"      icon={BarChart2} color="#0072C6" />
-        <StatCard label="Mastery Rate"   value="88%"  sub="of students passed"  icon={Brain}     color="#9B59B6" />
-        <StatCard label="Students"       value="35"   sub="enrolled"            icon={Users}     color="#2ECC71" />
-        <StatCard label="Completion"     value="100%" sub="35/35 submitted"     icon={CheckCircle2} color="#42A5F5" />
+        <StatCard label="Avg Score"    value="68%"  sub="class average"       icon={BarChart2}    color="#0072C6" />
+        <StatCard label="Mastery Rate" value="58%"  sub="of students passed"   icon={Brain}        color="#E74C3C" />
+        <StatCard label="Students"     value="35"   sub="enrolled"             icon={Users}        color="#2ECC71" />
+        <StatCard label="Completion"   value="91%"  sub="32/35 submitted"      icon={CheckCircle2} color="#42A5F5" />
       </div>
 
       {/* Score distribution + Subtopic heatmap */}
@@ -1029,7 +947,7 @@ export default function DemoAssessmentPage() {
         <MasteryHeatmap />
       </div>
 
-      {/* Topics to Reteach + At-Risk (side by side on large) */}
+      {/* Topics to Reteach + At-Risk */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         <ReteachPanel />
         <AtRiskPanel />

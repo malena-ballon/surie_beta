@@ -8,7 +8,11 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { useSidebar } from "@/components/layout/sidebar-context"
@@ -112,35 +116,8 @@ export function TopBar({
         <Menu className="w-5 h-5" strokeWidth={1.75} />
       </button>
 
-      {/* LEFT — Test Version dropdown + Breadcrumb */}
-      <div className="flex items-center gap-3 flex-1 min-w-0">
-        {/* Test Version dropdown */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button className="flex items-center gap-1.5 shrink-0 px-2.5 py-1 rounded-full bg-primary-50 border border-primary-200 text-primary-600 text-[11px] font-semibold hover:bg-primary-100 transition-colors outline-none focus-visible:ring-2 focus-visible:ring-primary-500">
-              <FlaskConical className="w-3 h-3" strokeWidth={2} />
-              <span className="hidden sm:inline">Test Version</span>
-              <ChevronDown className="w-3 h-3" strokeWidth={2.5} />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" sideOffset={8} className="w-40">
-            <DropdownMenuItem
-              className="gap-2 cursor-pointer"
-              onClick={() => router.push("/dashboard/demo")}
-            >
-              <LayoutDashboard className="w-4 h-4 text-ink-tertiary" strokeWidth={1.75} />
-              Dashboard
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              className="gap-2 cursor-pointer"
-              onClick={() => router.push("/dashboard/demo/report")}
-            >
-              <BarChart3 className="w-4 h-4 text-ink-tertiary" strokeWidth={1.75} />
-              Report
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-
+      {/* LEFT — Breadcrumb */}
+      <div className="flex-1 min-w-0">
         <Breadcrumb items={breadcrumbs} />
       </div>
 
@@ -210,6 +187,24 @@ export function TopBar({
               <HelpCircle className="w-4 h-4 text-ink-tertiary" strokeWidth={1.75} />
               Help
             </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger className="gap-2 cursor-pointer">
+                <FlaskConical className="w-4 h-4 text-ink-tertiary" strokeWidth={1.75} />
+                <span>Test Version</span>
+              </DropdownMenuSubTrigger>
+              <DropdownMenuSubContent className="w-40">
+                <DropdownMenuLabel className="text-[11px] text-ink-tertiary font-normal px-2 py-1">Demo Pages</DropdownMenuLabel>
+                <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => router.push("/dashboard/demo")}>
+                  <LayoutDashboard className="w-4 h-4 text-ink-tertiary" strokeWidth={1.75} />
+                  Dashboard
+                </DropdownMenuItem>
+                <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => router.push("/dashboard/demo/report")}>
+                  <BarChart3 className="w-4 h-4 text-ink-tertiary" strokeWidth={1.75} />
+                  Report
+                </DropdownMenuItem>
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
             <DropdownMenuSeparator />
             <DropdownMenuItem
               className="gap-2 cursor-pointer text-danger-500 focus:text-danger-500 focus:bg-danger-50"
