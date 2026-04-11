@@ -12,6 +12,7 @@ from app.models.diagnostic_report import DiagnosticReport
 from app.models.student_mastery import StudentMastery, TrendType
 from app.models.reassessment import ReAssessment, ReAssessmentType
 from app.models.topic_taxonomy import TopicTaxonomy
+from app.models.reviewer_output import ReviewerOutput
 
 __all__ = [
     "Base",
@@ -28,4 +29,5 @@ __all__ = [
     "StudentMastery", "TrendType",
     "ReAssessment", "ReAssessmentType",
     "TopicTaxonomy",
+    "ReviewerOutput",
 ]

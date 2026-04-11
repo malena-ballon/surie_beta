@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.models import Assessment, SourceMaterial
 from app.models.diagnostic_report import DiagnosticReport
+from app.models.reviewer_output import ReviewerOutput
 
 logger = logging.getLogger(__name__)
 
@@ -171,11 +172,29 @@ async def generate_reviewer(
     content = await _call_gemini(prompt)
 
     from datetime import datetime, timezone
+
+    title = f"{source.title} — Study Reviewer"
+    weak_list = [s["subtopic"] for s in weak_subtopics]
+
+    # Persist to DB
+    record = ReviewerOutput(
+        assessment_id=assessment_id,
+        title=title,
+        subject=subject or "",
+        grade_level=grade_level or "",
+        content=content.strip(),
+        weak_subtopics=weak_list,
+    )
+    db.add(record)
+    await db.commit()
+    await db.refresh(record)
+
     return {
-        "title": f"{source.title} — Study Reviewer",
+        "id": str(record.id),
+        "title": title,
         "subject": subject or "",
         "grade_level": grade_level or "",
         "content": content.strip(),
-        "weak_subtopics": [s["subtopic"] for s in weak_subtopics],
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "weak_subtopics": weak_list,
+        "generated_at": record.created_at.isoformat(),
     }

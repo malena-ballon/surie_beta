@@ -449,12 +449,24 @@ export const api = {
       })
   },
 
+  getReviewers(assessmentId: string) {
+    return req<Array<{
+      id: string
+      title: string
+      subject: string
+      grade_level: string
+      content: string
+      weak_subtopics: string[]
+      generated_at: string
+    }>>(`/api/v1/assessments/${assessmentId}/reviewers`)
+  },
   generateReviewer(assessmentId: string, data: {
     subject?: string
     grade_level?: string
     mastery_threshold?: number
   }) {
     return req<{
+      id: string
       title: string
       subject: string
       grade_level: string

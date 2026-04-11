@@ -224,6 +224,34 @@ async def get_assessment_responses(
     }
 
 
+@router.get("/{assessment_id}/reviewers")
+async def list_reviewers(
+    assessment_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list:
+    await _get_assessment_or_403(assessment_id, db, current_user)
+    from app.models.reviewer_output import ReviewerOutput
+    from sqlalchemy import desc
+    rows = (await db.execute(
+        select(ReviewerOutput)
+        .where(ReviewerOutput.assessment_id == assessment_id)
+        .order_by(desc(ReviewerOutput.created_at))
+    )).scalars().all()
+    return [
+        {
+            "id": str(r.id),
+            "title": r.title,
+            "subject": r.subject,
+            "grade_level": r.grade_level,
+            "content": r.content,
+            "weak_subtopics": r.weak_subtopics or [],
+            "generated_at": r.created_at.isoformat(),
+        }
+        for r in rows
+    ]
+
+
 @router.post("/{assessment_id}/reviewer/generate")
 async def generate_reviewer_endpoint(
     assessment_id: uuid.UUID,

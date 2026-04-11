@@ -1341,12 +1341,62 @@ const REVIEWER_GEN_MESSAGES = [
 ]
 
 type ReviewerResult = {
+  id?: string
   title: string
   subject: string
   grade_level: string
   content: string
   weak_subtopics: string[]
   generated_at: string
+}
+
+type ReviewerView = "loading" | "list" | "config" | "viewing" | "generating"
+
+function markdownToHtml(md: string): string {
+  return md
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/^### (.+)$/gm, "<h3>$1</h3>")
+    .replace(/^## (.+)$/gm, "<h2>$1</h2>")
+    .replace(/^# (.+)$/gm, "<h1>$1</h1>")
+    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+    .replace(/\*(.+?)\*/g, "<em>$1</em>")
+    .replace(/^[-*] (.+)$/gm, "<li>$1</li>")
+    .replace(/(<li>.*<\/li>\n?)+/g, (m) => `<ul>${m}</ul>`)
+    .replace(/\n{2,}/g, "</p><p>")
+    .replace(/^(?!<[hul])(.+)$/gm, (l) => l.trim() ? l : "")
+    .replace(/^(<p>)?([^<\n].+)$/gm, "<p>$2</p>")
+}
+
+function handlePdfDownload(result: ReviewerResult) {
+  const html = markdownToHtml(result.content)
+  const win = window.open("", "_blank")
+  if (!win) return
+  win.document.write(`<!DOCTYPE html><html><head>
+<meta charset="utf-8"/>
+<title>${result.title}</title>
+<style>
+  body { font-family: Georgia, serif; max-width: 800px; margin: 40px auto; padding: 0 24px; color: #1a1a1a; line-height: 1.7; }
+  h1 { font-size: 1.6rem; border-bottom: 2px solid #0072C6; padding-bottom: 8px; color: #0072C6; }
+  h2 { font-size: 1.25rem; color: #0072C6; margin-top: 2rem; }
+  h3 { font-size: 1.05rem; color: #333; margin-top: 1.5rem; }
+  ul { padding-left: 1.5rem; }
+  li { margin-bottom: 4px; }
+  p { margin: 0.75rem 0; }
+  strong { color: #111; }
+  .meta { font-family: sans-serif; font-size: 0.8rem; color: #888; margin-bottom: 1.5rem; }
+  @media print { body { margin: 0; } }
+</style>
+</head><body>
+<h1>${result.title}</h1>
+<div class="meta">
+  ${result.subject ? `Subject: ${result.subject} &nbsp;|&nbsp;` : ""}
+  ${result.grade_level ? `Grade ${result.grade_level} &nbsp;|&nbsp;` : ""}
+  Generated ${new Date(result.generated_at).toLocaleDateString("en-PH", { month: "long", day: "numeric", year: "numeric" })}
+</div>
+${html}
+</body></html>`)
+  win.document.close()
+  setTimeout(() => { win.print() }, 400)
 }
 
 function ReviewerModal({
@@ -1358,60 +1408,67 @@ function ReviewerModal({
   assessmentId: string
   onClose: () => void
 }) {
+  const [view, setView] = useState<ReviewerView>("loading")
+  const [pastReviewers, setPastReviewers] = useState<ReviewerResult[]>([])
   const [subject, setSubject] = useState("")
   const [gradeLevel, setGradeLevel] = useState("")
-  const [generating, setGenerating] = useState(false)
   const [msgIdx, setMsgIdx] = useState(0)
-  const [result, setResult] = useState<ReviewerResult | null>(null)
+  const [current, setCurrent] = useState<ReviewerResult | null>(null)
   const [copied, setCopied] = useState(false)
 
+  // Load past reviewers on open
   useEffect(() => {
-    if (!generating) return
+    api.getReviewers(assessmentId)
+      .then((list) => {
+        setPastReviewers(list)
+        setView(list.length > 0 ? "list" : "config")
+      })
+      .catch(() => setView("config"))
+  }, [assessmentId])
+
+  useEffect(() => {
+    if (view !== "generating") return
     const t = setInterval(() => setMsgIdx((i) => (i + 1) % REVIEWER_GEN_MESSAGES.length), 2500)
     return () => clearInterval(t)
-  }, [generating])
+  }, [view])
 
   const weakCount = Object.values(report.subtopic_mastery).filter((s) => s.pct < 70).length
 
   const handleGenerate = async () => {
-    setGenerating(true)
+    setView("generating")
     try {
       const res = await api.generateReviewer(assessmentId, { subject, grade_level: gradeLevel })
-      setResult(res)
+      setCurrent(res)
+      setPastReviewers((prev) => [res, ...prev])
+      setView("viewing")
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Reviewer generation failed")
-    } finally {
-      setGenerating(false)
+      setView("config")
     }
   }
 
   const handleCopy = async () => {
-    if (!result) return
-    await navigator.clipboard.writeText(result.content)
+    if (!current) return
+    await navigator.clipboard.writeText(current.content)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
-  }
-
-  const handleDownload = () => {
-    if (!result) return
-    const blob = new Blob([result.content], { type: "text/markdown" })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href = url
-    a.download = `${result.title.replace(/[^a-z0-9]/gi, "_")}.md`
-    a.click()
-    URL.revokeObjectURL(url)
   }
 
   const inputCls =
     "w-full h-[42px] px-[14px] text-sm font-body text-ink-primary placeholder:text-ink-tertiary bg-white border border-border-default rounded-[10px] focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-colors"
 
+  const headerTitle =
+    view === "list" ? "Study Reviewers" :
+    view === "config" ? "Generate Study Reviewer" :
+    view === "generating" ? "Generating Reviewer…" :
+    current?.title ?? "Study Reviewer"
+
   return (
     <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center sm:p-4">
-      <div className="bg-white rounded-t-[20px] sm:rounded-[20px] shadow-2xl w-full sm:max-w-[680px] h-[92vh] sm:h-auto sm:max-h-[90vh] flex flex-col">
+      <div className="relative bg-white rounded-t-[20px] sm:rounded-[20px] shadow-2xl w-full sm:max-w-[680px] h-[92vh] sm:h-auto sm:max-h-[90vh] flex flex-col">
 
         {/* Generating overlay */}
-        {generating && (
+        {view === "generating" && (
           <div className="absolute inset-0 bg-white/95 rounded-[20px] z-10 flex flex-col items-center justify-center gap-4">
             <div className="w-16 h-16 rounded-full bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center">
               <BookOpen className="w-8 h-8 text-white animate-pulse" />
@@ -1436,12 +1493,10 @@ function ReviewerModal({
         <div className="flex items-center justify-between px-6 py-4 border-b border-border-light shrink-0">
           <div className="flex items-center gap-2">
             <BookOpen className="w-5 h-5 text-primary-500" strokeWidth={1.75} />
-            <h2 className="font-display font-semibold text-lg text-ink-primary">
-              {result ? result.title : "Generate Study Reviewer"}
-            </h2>
+            <h2 className="font-display font-semibold text-lg text-ink-primary">{headerTitle}</h2>
           </div>
           <div className="flex items-center gap-2">
-            {result && (
+            {view === "viewing" && current && (
               <>
                 <button
                   onClick={handleCopy}
@@ -1451,11 +1506,11 @@ function ReviewerModal({
                   {copied ? "Copied!" : "Copy"}
                 </button>
                 <button
-                  onClick={handleDownload}
+                  onClick={() => handlePdfDownload(current)}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-[8px] text-[12px] font-medium font-body text-ink-secondary hover:text-ink-primary border border-border-light hover:border-border-default transition-colors"
                 >
                   <Download className="w-3.5 h-3.5" />
-                  Download
+                  Download PDF
                 </button>
               </>
             )}
@@ -1466,10 +1521,43 @@ function ReviewerModal({
         </div>
 
         <div className="overflow-y-auto flex-1 px-6 py-5">
-          {!result ? (
-            /* ── Config form ── */
+
+          {/* ── Loading ── */}
+          {view === "loading" && (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-6 h-6 animate-spin text-ink-tertiary" />
+            </div>
+          )}
+
+          {/* ── List view ── */}
+          {view === "list" && (
+            <div className="space-y-3">
+              {pastReviewers.map((r, i) => (
+                <div key={r.id ?? i} className="flex items-center justify-between p-4 rounded-[12px] border border-border-light hover:border-border-default transition-colors">
+                  <div className="min-w-0 flex-1">
+                    <p className="font-body font-medium text-[14px] text-ink-primary truncate">{r.title}</p>
+                    <div className="flex flex-wrap gap-1.5 mt-1.5">
+                      {r.subject && <span className="text-[11px] px-2 py-0.5 rounded-full bg-surface-secondary font-body text-ink-tertiary">{r.subject}</span>}
+                      {r.grade_level && <span className="text-[11px] px-2 py-0.5 rounded-full bg-surface-secondary font-body text-ink-tertiary">Grade {r.grade_level}</span>}
+                      <span className="text-[11px] px-2 py-0.5 rounded-full bg-surface-secondary font-body text-ink-tertiary">
+                        {new Date(r.generated_at).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" })}
+                      </span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => { setCurrent(r); setView("viewing") }}
+                    className="ml-4 shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-[8px] text-[12px] font-medium font-body bg-primary-50 text-primary-600 hover:bg-primary-100 transition-colors"
+                  >
+                    View
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* ── Config form ── */}
+          {view === "config" && (
             <div className="space-y-5">
-              {/* Summary banner */}
               <div className="rounded-[12px] bg-gradient-to-br from-primary-50 to-accent-50 border border-primary-100 p-4 space-y-1">
                 <p className="font-display font-semibold text-[14px] text-ink-primary">
                   AI-powered reviewer based on your class results
@@ -1480,7 +1568,6 @@ function ReviewerModal({
                 </p>
               </div>
 
-              {/* Weak subtopics preview */}
               <div>
                 <p className="text-[12px] font-semibold font-body text-ink-tertiary uppercase tracking-wide mb-2">
                   Will focus on
@@ -1493,68 +1580,52 @@ function ReviewerModal({
                       <span
                         key={s}
                         className="text-[11px] font-body px-2.5 py-1 rounded-full"
-                        style={{
-                          backgroundColor: MASTERY_COLORS[d.level].bg,
-                          color: MASTERY_COLORS[d.level].text,
-                        }}
+                        style={{ backgroundColor: MASTERY_COLORS[d.level].bg, color: MASTERY_COLORS[d.level].text }}
                       >
                         {s} · {d.pct}%
                       </span>
-                    ))
-                  }
-                  {Object.values(report.subtopic_mastery).filter((d) => d.pct < 70).length === 0 && (
+                    ))}
+                  {weakCount === 0 && (
                     <span className="text-[12px] font-body text-ink-tertiary">All topics above 70% — reviewer will reinforce strongest areas.</span>
                   )}
                 </div>
               </div>
 
-              {/* Optional fields */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <label className="text-[13px] font-medium text-ink-secondary font-body">Subject <span className="text-ink-tertiary font-normal">(optional)</span></label>
-                  <input
-                    value={subject}
-                    onChange={(e) => setSubject(e.target.value)}
-                    placeholder="e.g. Science"
-                    className={inputCls}
-                  />
+                  <input value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="e.g. Science" className={inputCls} />
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-[13px] font-medium text-ink-secondary font-body">Grade Level <span className="text-ink-tertiary font-normal">(optional)</span></label>
-                  <input
-                    value={gradeLevel}
-                    onChange={(e) => setGradeLevel(e.target.value)}
-                    placeholder="e.g. 7"
-                    className={inputCls}
-                  />
+                  <input value={gradeLevel} onChange={(e) => setGradeLevel(e.target.value)} placeholder="e.g. 7" className={inputCls} />
                 </div>
               </div>
             </div>
-          ) : (
-            /* ── Reviewer content ── */
+          )}
+
+          {/* ── Viewing ── */}
+          {view === "viewing" && current && (
             <div className="space-y-4">
-              {/* Metadata */}
               <div className="flex flex-wrap gap-2 text-[11px] font-body text-ink-tertiary">
-                {result.subject && <span className="px-2 py-0.5 rounded-full bg-surface-secondary">{result.subject}</span>}
-                {result.grade_level && <span className="px-2 py-0.5 rounded-full bg-surface-secondary">Grade {result.grade_level}</span>}
+                {current.subject && <span className="px-2 py-0.5 rounded-full bg-surface-secondary">{current.subject}</span>}
+                {current.grade_level && <span className="px-2 py-0.5 rounded-full bg-surface-secondary">Grade {current.grade_level}</span>}
                 <span className="px-2 py-0.5 rounded-full bg-surface-secondary">
-                  {result.weak_subtopics.length} topic{result.weak_subtopics.length !== 1 ? "s" : ""} covered
+                  {current.weak_subtopics.length} topic{current.weak_subtopics.length !== 1 ? "s" : ""} covered
                 </span>
                 <span className="px-2 py-0.5 rounded-full bg-surface-secondary">
-                  Generated {new Date(result.generated_at).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" })}
+                  Generated {new Date(current.generated_at).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" })}
                 </span>
               </div>
 
-              {/* Rendered markdown */}
-              <ReviewerContent content={result.content} />
+              <ReviewerContent content={current.content} />
 
-              {/* Regenerate */}
               <div className="pt-2 border-t border-border-light">
                 <button
-                  onClick={() => setResult(null)}
+                  onClick={() => { setCurrent(null); setView(pastReviewers.length > 0 ? "list" : "config") }}
                   className="text-[12px] font-body text-ink-tertiary hover:text-ink-primary transition-colors"
                 >
-                  ← Generate again with different settings
+                  ← Back to reviewers
                 </button>
               </div>
             </div>
@@ -1562,15 +1633,32 @@ function ReviewerModal({
         </div>
 
         {/* Footer */}
-        {!result && (
+        {view === "list" && (
           <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-border-light shrink-0">
-            <Button variant="secondary" onClick={onClose} disabled={generating}>Cancel</Button>
-            <Button variant="gradient" onClick={handleGenerate} disabled={generating}>
-              {generating
-                ? <><Loader2 className="w-4 h-4 animate-spin" /> Generating…</>
-                : <><BookOpen className="w-4 h-4" /> Generate Reviewer</>
-              }
+            <Button variant="secondary" onClick={onClose}>Cancel</Button>
+            <Button variant="gradient" onClick={() => setView("config")}>
+              <BookOpen className="w-4 h-4" /> Generate New Reviewer
             </Button>
+          </div>
+        )}
+        {view === "config" && (
+          <div className="flex items-center justify-between gap-3 px-6 py-4 border-t border-border-light shrink-0">
+            <div>
+              {pastReviewers.length > 0 && (
+                <button
+                  onClick={() => setView("list")}
+                  className="text-[12px] font-body text-ink-tertiary hover:text-ink-primary transition-colors"
+                >
+                  ← View past reviewers
+                </button>
+              )}
+            </div>
+            <div className="flex items-center gap-3">
+              <Button variant="secondary" onClick={onClose}>Cancel</Button>
+              <Button variant="gradient" onClick={handleGenerate}>
+                <BookOpen className="w-4 h-4" /> Generate Reviewer
+              </Button>
+            </div>
           </div>
         )}
       </div>
