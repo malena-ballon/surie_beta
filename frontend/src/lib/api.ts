@@ -449,6 +449,24 @@ export const api = {
       })
   },
 
+  generateReviewer(assessmentId: string, data: {
+    subject?: string
+    grade_level?: string
+    mastery_threshold?: number
+  }) {
+    return req<{
+      title: string
+      subject: string
+      grade_level: string
+      content: string
+      weak_subtopics: string[]
+      generated_at: string
+    }>(`/api/v1/assessments/${assessmentId}/reviewer/generate`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    })
+  },
+
   // Student
   getStudentAssessments() {
     return req<StudentAssessmentItem[]>("/api/v1/submissions/students/assessments")

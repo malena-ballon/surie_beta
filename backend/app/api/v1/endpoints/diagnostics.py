@@ -14,6 +14,7 @@ from app.models.response import Response as ResponseModel
 from app.models.submission import Submission, SubmissionStatus
 from app.services.diagnostic_service import generate_diagnostic_report
 from app.services.reassessment_service import generate_class_reassessment
+from app.services.reviewer_service import generate_reviewer
 
 
 class ReassessmentRequest(BaseModel):
@@ -23,6 +24,12 @@ class ReassessmentRequest(BaseModel):
     subject: str = ""
     grade_level: str = ""
     mastery_threshold: float = 60.0
+
+
+class ReviewerRequest(BaseModel):
+    subject: str = ""
+    grade_level: str = ""
+    mastery_threshold: float = 70.0
 
 router = APIRouter()
 
@@ -215,6 +222,31 @@ async def get_assessment_responses(
         "student_responses": student_responses,
         "question_analysis": question_analysis,
     }
+
+
+@router.post("/{assessment_id}/reviewer/generate")
+async def generate_reviewer_endpoint(
+    assessment_id: uuid.UUID,
+    body: ReviewerRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    await _get_assessment_or_403(assessment_id, db, current_user)
+    await db.close()
+
+    from app.core.database import AsyncSessionLocal
+    async with AsyncSessionLocal() as work_db:
+        try:
+            result = await generate_reviewer(
+                assessment_id=assessment_id,
+                config=body.model_dump(),
+                db=work_db,
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        except Exception as e:
+            raise HTTPException(status_code=502, detail=f"Reviewer generation failed: {e}")
+    return result
 
 
 @router.patch("/{assessment_id}/taxonomy")
