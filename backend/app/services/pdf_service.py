@@ -32,10 +32,17 @@ LIGHT_GRAY = colors.HexColor("#F5F4F1")
 MID_GRAY = colors.HexColor("#9B9794")
 
 
-def _get_logo_image(size: float = 28) -> Image:
+def _get_logo_image(height: float = 20) -> Image:
+    """Return the logo scaled to a fixed height, preserving aspect ratio."""
     path = os.path.normpath(_LOGO_PATH)
-    img = Image(path, width=size, height=size)
-    return img
+    # logo-mark.png is 537×271 px → ratio ≈ 1.98
+    import struct
+    with open(path, "rb") as f:
+        f.read(16)
+        w_px = struct.unpack(">I", f.read(4))[0]
+        h_px = struct.unpack(">I", f.read(4))[0]
+    ratio = w_px / h_px
+    return Image(path, width=height * ratio, height=height)
 
 
 def _parse_markdown(text: str, styles: dict) -> list:
@@ -178,7 +185,7 @@ def generate_reviewer_pdf(
 
     # ── Header row: logo + "Surie" | title ──────────────────────
     try:
-        logo = _get_logo_image(24)
+        logo = _get_logo_image(18)
     except Exception:
         logo = Spacer(24, 24)
 
