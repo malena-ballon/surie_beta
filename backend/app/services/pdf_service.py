@@ -183,32 +183,36 @@ def generate_reviewer_pdf(
 
     story = []
 
-    # ── Header row: logo + "Surie" | title ──────────────────────
+    # ── Header row: logo + "Surie" label on the left, tag on the right ──
     try:
-        logo = _get_logo_image(18)
+        logo = _get_logo_image(14)          # 14 pt tall → ~28 pt wide
     except Exception:
-        logo = Spacer(24, 24)
+        logo = Spacer(28, 14)
 
-    logo_cell = [[logo, Paragraph("<b>Surie</b>", ParagraphStyle(
+    brand_style = ParagraphStyle(
         "brand",
-        fontSize=13,
+        fontSize=12,
         textColor=SURIE_BLUE,
         fontName="Helvetica-Bold",
-        leading=16,
-    ))]]
-    logo_tbl = Table(logo_cell, colWidths=[28, 60])
+        leading=14,
+    )
+    tag_style = ParagraphStyle(
+        "tag", fontSize=8, textColor=MID_GRAY, fontName="Helvetica", alignment=2
+    )
+
+    # left cell: logo image + "Surie" text side-by-side
+    logo_cell = [[logo, Paragraph("<b>Surie</b>", brand_style)]]
+    logo_tbl = Table(logo_cell, colWidths=[32, 50])
     logo_tbl.setStyle(TableStyle([
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
         ("LEFTPADDING", (0, 0), (-1, -1), 0),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+        ("RIGHTPADDING", (0, 0), (0, 0), 6),   # gap between logo and text
+        ("RIGHTPADDING", (1, 0), (1, 0), 0),
         ("TOPPADDING", (0, 0), (-1, -1), 0),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
     ]))
 
-    header_data = [[logo_tbl, Paragraph(
-        f'<font color="#9B9794" size="9">Study Reviewer</font>',
-        ParagraphStyle("right", fontSize=9, textColor=MID_GRAY, fontName="Helvetica", alignment=2),
-    )]]
+    header_data = [[logo_tbl, Paragraph("Study Reviewer", tag_style)]]
     header_tbl = Table(header_data, colWidths=[None, 80])
     header_tbl.setStyle(TableStyle([
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
@@ -218,7 +222,8 @@ def generate_reviewer_pdf(
         ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
     ]))
     story.append(header_tbl)
-    story.append(HRFlowable(width="100%", thickness=1.5, color=SURIE_BLUE, spaceAfter=6 * mm))
+    story.append(Spacer(1, 4 * mm))
+    story.append(HRFlowable(width="100%", thickness=1.5, color=SURIE_BLUE, spaceBefore=0, spaceAfter=6 * mm))
 
     # ── Document title ──────────────────────────────────────────
     story.append(Paragraph(title, ParagraphStyle(
