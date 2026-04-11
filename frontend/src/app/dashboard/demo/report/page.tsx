@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useRouter } from "next/navigation"
 import {
   BarChart3,
   ChevronDown,
@@ -191,13 +192,13 @@ const DEMO_REPORTS: DemoReport[] = [
 
 // ── Report row ─────────────────────────────────────────────────
 
-function DemoReportRow({ report }: { report: DemoReport }) {
+function DemoReportRow({ report, onClick }: { report: DemoReport; onClick?: () => void }) {
   const dateStr = new Date(report.date).toLocaleDateString("en-PH", {
     month: "short", day: "numeric", year: "numeric",
   })
 
   return (
-    <div className="bg-white rounded-[14px] border border-border-light shadow-card p-5 flex flex-col sm:flex-row sm:items-center gap-4 hover:shadow-card-hover transition-shadow duration-[250ms] cursor-pointer">
+    <div onClick={onClick} className="bg-white rounded-[14px] border border-border-light shadow-card p-5 flex flex-col sm:flex-row sm:items-center gap-4 hover:shadow-card-hover transition-shadow duration-[250ms] cursor-pointer">
       <div className="w-11 h-11 rounded-[12px] bg-primary-50 flex items-center justify-center shrink-0">
         <BarChart3 className="w-5 h-5 text-primary-500" strokeWidth={1.75} />
       </div>
@@ -242,6 +243,7 @@ function DemoReportRow({ report }: { report: DemoReport }) {
 // ── Page ───────────────────────────────────────────────────────
 
 export default function DemoReportPage() {
+  const router = useRouter()
   const [filterClass, setFilterClass] = useState("")
   const [filterType, setFilterType] = useState("")
   const [filterFrom, setFilterFrom] = useState("")
@@ -353,7 +355,11 @@ export default function DemoReportPage() {
       {/* Report list */}
       <div className="space-y-4">
         {filtered.map((r) => (
-          <DemoReportRow key={r.id} report={r} />
+          <DemoReportRow
+            key={r.id}
+            report={r}
+            onClick={r.id === "r1" ? () => router.push("/dashboard/demo/assessment") : undefined}
+          />
         ))}
       </div>
     </div>
