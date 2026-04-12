@@ -1,3 +1,4 @@
+import json
 import uuid
 from datetime import datetime, timezone
 
@@ -192,6 +193,27 @@ async def submit_exam(
             resp.is_correct = answer == correct
             resp.score = 1.0 if resp.is_correct else 0.0
             total_score += resp.score
+        elif q_type == "matching":
+            # correct_answer is a JSON array: [{"term": "...", "match": "..."}]
+            # student_answer is a JSON object: {"term": "match", ...}
+            try:
+                correct_pairs = json.loads(q.correct_answer or "[]")
+                student_map = json.loads(resp.student_answer or "{}")
+                if not correct_pairs:
+                    resp.is_correct = False
+                    resp.score = 0.0
+                else:
+                    matched = sum(
+                        1 for pair in correct_pairs
+                        if str(student_map.get(pair.get("term", ""), "")).strip().lower()
+                           == str(pair.get("match", "")).strip().lower()
+                    )
+                    resp.is_correct = matched == len(correct_pairs)
+                    resp.score = round(matched / len(correct_pairs), 4)
+                    total_score += resp.score
+            except (json.JSONDecodeError, KeyError, TypeError, AttributeError):
+                resp.is_correct = False
+                resp.score = 0.0
         else:
             # true_false, identification
             correct = str(q.correct_answer or "").strip().lower()

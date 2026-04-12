@@ -37,6 +37,7 @@ Rules:
 - Apply the specified difficulty level consistently
 - Make questions grade-level appropriate for Grade {grade_level}
 - Base ALL questions strictly on the provided source material
+- NEVER reference the source material in question text — do NOT use phrases like "according to the text", "based on the passage", "as mentioned in the source", "in the material", "the document states", "from the provided source", or any similar phrasing — questions must read as fully standalone items with no reference to any source
 - subtopic_tags must use BROAD topic names (e.g. "Cell Division", "Newton's Laws") — never narrow sub-steps or specific phases
 - For mcq: always provide exactly 4 choices labeled A, B, C, D; one must be correct
 - For true_false: correct_answer must be exactly "True" or "False"

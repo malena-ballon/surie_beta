@@ -1046,6 +1046,7 @@ function Step2({ assessment, initialQuestions, classes, lastBreakdown, onDone }:
   const [selectedId, setSelectedId] = useState<string | null>(initialQuestions[0]?.id ?? null)
   const [regenerating, setRegenerating] = useState(false)
   const [confirmRegen, setConfirmRegen] = useState(false)
+  const [showAddMenu, setShowAddMenu] = useState(false)
   const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
 
   const selectedQuestion = questions.find((q) => q.id === selectedId) ?? null
@@ -1104,39 +1105,44 @@ function Step2({ assessment, initialQuestions, classes, lastBreakdown, onDone }:
     }
   }
 
-  const handleAddQuestion = async () => {
+  const handleAddQuestion = async (questionType: QuestionType) => {
+    setShowAddMenu(false)
+    const defaultChoices =
+      questionType === "mcq"
+        ? [
+            { label: "A", text: "", is_correct: false },
+            { label: "B", text: "", is_correct: false },
+            { label: "C", text: "", is_correct: false },
+            { label: "D", text: "", is_correct: false },
+          ]
+        : null
+    const body = {
+      question_text: "New question",
+      question_type: questionType,
+      choices: defaultChoices,
+      correct_answer: questionType === "true_false" ? "True" : "",
+      display_order: questions.length + 1,
+      created_via: "manual" as const,
+    }
     try {
-      const newQ = await api.updateQuestion("", {}) // placeholder — actually needs POST
-      toast.info("Use the backend POST endpoint to add questions")
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/api/v1/assessments/${assessment.id}/questions`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${localStorage.getItem("surie_token") ?? ""}`,
+          },
+          body: JSON.stringify(body),
+        }
+      )
+      if (!res.ok) throw new Error()
+      const created: QuestionItem = await res.json()
+      setQuestions((qs) => [...qs, created])
+      setSelectedId(created.id)
+      toast.success("Question added")
     } catch {
-      // Add via API
-      const body = {
-        question_text: "New question",
-        question_type: "identification" as QuestionType,
-        correct_answer: "",
-        display_order: questions.length + 1,
-        created_via: "manual" as const,
-      }
-      try {
-        const res = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/api/v1/assessments/${assessment.id}/questions`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${localStorage.getItem("surie_token") ?? ""}`,
-            },
-            body: JSON.stringify(body),
-          }
-        )
-        if (!res.ok) throw new Error()
-        const created: QuestionItem = await res.json()
-        setQuestions((qs) => [...qs, created])
-        setSelectedId(created.id)
-        toast.success("Question added")
-      } catch {
-        toast.error("Failed to add question")
-      }
+      toast.error("Failed to add question")
     }
   }
 
@@ -1185,13 +1191,32 @@ function Step2({ assessment, initialQuestions, classes, lastBreakdown, onDone }:
               {regenerating ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
               Regen
             </button>
-            <button
-              onClick={handleAddQuestion}
-              className="w-6 h-6 rounded-md flex items-center justify-center text-ink-tertiary hover:text-primary-500 hover:bg-primary-50 transition-colors"
-              title="Add question"
-            >
-              <Plus className="w-3.5 h-3.5" />
-            </button>
+            <div className="relative">
+              <button
+                onClick={() => setShowAddMenu((v) => !v)}
+                className="w-6 h-6 rounded-md flex items-center justify-center text-ink-tertiary hover:text-primary-500 hover:bg-primary-50 transition-colors"
+                title="Add question"
+              >
+                <Plus className="w-3.5 h-3.5" />
+              </button>
+              {showAddMenu && (
+                <>
+                  <div className="fixed inset-0 z-10" onClick={() => setShowAddMenu(false)} />
+                  <div className="absolute right-0 top-7 z-20 w-44 bg-white border border-border-light rounded-[10px] shadow-lg py-1 overflow-hidden">
+                    <p className="px-3 py-1.5 text-[10px] font-semibold font-body text-ink-tertiary uppercase tracking-wide">Question type</p>
+                    {(["mcq", "true_false", "identification", "essay", "matching"] as QuestionType[]).map((t) => (
+                      <button
+                        key={t}
+                        onClick={() => handleAddQuestion(t)}
+                        className="w-full text-left px-3 py-2 text-[13px] font-body text-ink-primary hover:bg-surface-secondary transition-colors capitalize"
+                      >
+                        {t === "mcq" ? "Multiple Choice" : t === "true_false" ? "True / False" : t.charAt(0).toUpperCase() + t.slice(1)}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </div>
         {/* Mobile: horizontal, Desktop: vertical */}
