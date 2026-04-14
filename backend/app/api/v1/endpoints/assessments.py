@@ -22,6 +22,7 @@ from app.schemas.assessments import (
     QuestionItem,
     QuestionUpdate,
     ReorderRequest,
+    ReleaseGradesRequest,
     TeacherResponseOverride,
 )
 from app.services.ai_generation import generate_exam_questions
@@ -69,6 +70,7 @@ def _to_item(assessment: Assessment, question_count: int) -> AssessmentItem:
         question_count=question_count,
         release_mode=getattr(assessment, "release_mode", "auto") or "auto",
         grades_released=getattr(assessment, "grades_released", False) or False,
+        release_type=getattr(assessment, "release_type", "none") or "none",
         created_at=assessment.created_at,
         updated_at=assessment.updated_at,
     )
@@ -224,9 +226,10 @@ async def publish_assessment(
     if body.time_limit_minutes is not None:
         assessment.time_limit_minutes = body.time_limit_minutes
     assessment.release_mode = body.release_mode
-    # For auto-release, grades are always visible to students immediately
+    # For auto-release, grades are immediately visible with full feedback
     if body.release_mode == "auto":
         assessment.grades_released = True
+        assessment.release_type = "score_with_feedback"
     await db.commit()
     await db.refresh(assessment)
     return _to_item(assessment, await _question_count(assessment.id, db))
@@ -491,12 +494,14 @@ async def grade_submissions(
 @router.post("/{assessment_id}/release-grades", response_model=AssessmentItem)
 async def release_grades(
     assessment_id: uuid.UUID,
+    body: ReleaseGradesRequest,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> AssessmentItem:
-    """Mark grades as released so students can see their scores and feedback."""
+    """Mark grades as released and record what scope students can see."""
     assessment = await _get_assessment_or_403(assessment_id, db, current_user)
     assessment.grades_released = True
+    assessment.release_type = body.release_type
     await db.commit()
     await db.refresh(assessment)
     return _to_item(assessment, await _question_count(assessment.id, db))

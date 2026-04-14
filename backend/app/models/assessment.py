@@ -50,3 +50,6 @@ class Assessment(Base):
     grades_released: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default="false"
     )
+    release_type: Mapped[str] = mapped_column(
+        String(30), nullable=False, default="none", server_default="none"
+    )

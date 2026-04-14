@@ -94,6 +94,10 @@ class PublishRequest(BaseModel):
     release_mode: str = "auto"
 
 
+class ReleaseGradesRequest(BaseModel):
+    release_type: str = "score_with_feedback"  # "score_only" | "score_with_feedback"
+
+
 class AssessmentItem(BaseModel):
     id: uuid.UUID
     title: str
@@ -109,6 +113,7 @@ class AssessmentItem(BaseModel):
     question_count: int
     release_mode: str
     grades_released: bool
+    release_type: str
     created_at: datetime
     updated_at: datetime
 

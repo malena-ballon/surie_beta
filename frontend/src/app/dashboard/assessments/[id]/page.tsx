@@ -44,6 +44,7 @@ import {
   type DiagnosticReport,
   type MasteryLevel,
   type QuestionItem,
+  type ReleaseType,
   type RubricCriterion,
   type StudentResponseItem,
   type StudentSubmissionResponse,
@@ -52,6 +53,12 @@ import {
   type TopicGroupDetail,
 } from "@/lib/api"
 import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
 
@@ -2034,7 +2041,6 @@ export default function AssessmentDiagnosticPage() {
   const [showReviewerModal, setShowReviewerModal] = useState(false)
   const [activeTab, setActiveTab] = useState<TabName>("Overview")
   const [responsesLoading, setResponsesLoading] = useState(false)
-  const [grading, setGrading] = useState(false)
   const [releasing, setReleasing] = useState(false)
 
   useEffect(() => {
@@ -2095,29 +2101,16 @@ export default function AssessmentDiagnosticPage() {
     }
   }
 
-  const handleGrade = async () => {
-    if (!assessment) return
-    setGrading(true)
-    try {
-      const result = await api.gradeSubmissions(assessment.id)
-      toast.success(`AI graded ${result.graded} submission${result.graded !== 1 ? "s" : ""}`)
-      // Refresh responses
-      const r2 = await api.getAssessmentResponses(assessment.id)
-      setResponses(r2)
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Grading failed")
-    } finally {
-      setGrading(false)
-    }
-  }
-
-  const handleRelease = async () => {
+  const handleRelease = async (releaseType: ReleaseType) => {
     if (!assessment) return
     setReleasing(true)
     try {
-      const updated = await api.releaseGrades(assessment.id)
-      setAssessment((prev) => prev ? { ...prev, grades_released: updated.grades_released } : prev)
-      toast.success("Grades released to students!")
+      const updated = await api.releaseGrades(assessment.id, releaseType)
+      setAssessment((prev) =>
+        prev ? { ...prev, grades_released: updated.grades_released, release_type: updated.release_type } : prev
+      )
+      const label = releaseType === "score_only" ? "scores only" : "scores with feedback"
+      toast.success(`Results released (${label}) to students!`)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Release failed")
     } finally {
@@ -2194,22 +2187,38 @@ export default function AssessmentDiagnosticPage() {
             <RefreshCw className={cn("w-4 h-4", syncing && "animate-spin")} />
             <span className="hidden sm:inline">{syncing ? "Syncing…" : "Sync"}</span>
           </Button>
-          {/* AI Grade button — only when there are pending submissions */}
-          <Button variant="secondary" size="sm" onClick={handleGrade} disabled={grading}>
-            <GraduationCap className={cn("w-4 h-4", grading && "animate-pulse")} />
-            <span className="hidden sm:inline">{grading ? "Grading…" : "AI Grade"}</span>
-          </Button>
-          {/* Release Grades — only when manual mode and not yet released */}
+          {/* Release Results — only when manual mode and not yet released */}
           {assessment.release_mode === "manual" && !assessment.grades_released && (
-            <Button variant="gradient" size="sm" onClick={handleRelease} disabled={releasing}>
-              <Eye className="w-4 h-4" />
-              <span className="hidden sm:inline">{releasing ? "Releasing…" : "Release Grades"}</span>
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="gradient" size="sm" disabled={releasing}>
+                  <Eye className="w-4 h-4" />
+                  <span className="hidden sm:inline">{releasing ? "Releasing…" : "Release Results"}</span>
+                  <ChevronDown className="w-3.5 h-3.5 ml-0.5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-52">
+                <DropdownMenuItem onClick={() => handleRelease("score_only")}>
+                  <GraduationCap className="w-4 h-4 mr-2 text-ink-tertiary" />
+                  <div>
+                    <p className="font-semibold text-[13px]">Score only</p>
+                    <p className="text-[11px] text-ink-tertiary">Total score visible to students</p>
+                  </div>
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleRelease("score_with_feedback")}>
+                  <Eye className="w-4 h-4 mr-2 text-ink-tertiary" />
+                  <div>
+                    <p className="font-semibold text-[13px]">Scores with feedback</p>
+                    <p className="text-[11px] text-ink-tertiary">Score, feedback & answers per question</p>
+                  </div>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           )}
           {assessment.release_mode === "manual" && assessment.grades_released && (
             <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-50 border border-green-200 text-green-700 text-[12px] font-semibold font-body">
               <Eye className="w-3.5 h-3.5" />
-              Grades Released
+              {assessment.release_type === "score_only" ? "Scores Released" : "Results Released"}
             </div>
           )}
           {report && (
@@ -2292,10 +2301,6 @@ export default function AssessmentDiagnosticPage() {
                 <div className="bg-white rounded-[14px] border border-border-light p-10 text-center space-y-3">
                   <GraduationCap className="w-8 h-8 text-ink-tertiary/40 mx-auto" strokeWidth={1.5} />
                   <p className="font-body text-sm text-ink-secondary">No submissions yet, or responses not loaded.</p>
-                  <Button variant="secondary" size="sm" onClick={handleGrade} disabled={grading}>
-                    <GraduationCap className="w-4 h-4" />
-                    {grading ? "Grading…" : "Run AI Grading"}
-                  </Button>
                 </div>
               )
           )}

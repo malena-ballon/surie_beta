@@ -100,3 +100,4 @@ class StudentAssessmentItem(BaseModel):
     max_score: int | None
     release_mode: str = "auto"
     grades_released: bool = False
+    release_type: str = "none"

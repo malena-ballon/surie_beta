@@ -2,12 +2,12 @@ import json
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
-from app.core.database import get_db
+from app.core.database import AsyncSessionLocal, get_db
 from app.models import (
     Assessment,
     AssessmentStatus,
@@ -20,6 +20,7 @@ from app.models import (
 )
 from app.models.response import Response as ResponseModel
 from app.models.submission import SubmissionStatus
+from app.services.ai_grading import fuzzy_match_identification, grade_essay
 from app.schemas.submissions import (
     QuestionForStudent,
     ResponseInput,
@@ -32,6 +33,65 @@ from app.schemas.submissions import (
 )
 
 router = APIRouter()
+
+
+# ── Background: AI-grade essay responses ──────────────────────
+
+
+async def _grade_essays_bg(submission_id: uuid.UUID, assessment_id: uuid.UUID) -> None:
+    """Background task: call Gemini to grade all essay responses for a submission."""
+    import logging
+    logger = logging.getLogger(__name__)
+    try:
+        async with AsyncSessionLocal() as db:
+            q_result = await db.execute(
+                select(Question).where(Question.assessment_id == assessment_id)
+            )
+            questions = {q.id: q for q in q_result.scalars().all()}
+
+            r_result = await db.execute(
+                select(ResponseModel).where(ResponseModel.submission_id == submission_id)
+            )
+            responses = r_result.scalars().all()
+
+            sub_result = await db.execute(
+                select(Submission).where(Submission.id == submission_id)
+            )
+            submission = sub_result.scalar_one_or_none()
+            if not submission:
+                return
+
+            essay_score = 0.0
+            for resp in responses:
+                q = questions.get(resp.question_id)
+                if not q:
+                    continue
+                q_type = str(
+                    q.question_type.value if hasattr(q.question_type, "value") else q.question_type
+                )
+                if q_type != "essay":
+                    continue
+                max_marks = float(getattr(q, "max_marks", 5.0) or 5.0)
+                result = await grade_essay(
+                    question_text=q.question_text,
+                    model_answer=q.correct_answer or "",
+                    student_answer=resp.student_answer or "",
+                    max_marks=max_marks,
+                )
+                resp.score = result["total_score"]
+                resp.rubric = result["rubric"]
+                resp.feedback = result["overall_comment"]
+                resp.is_correct = resp.score >= (max_marks * 0.5)
+                resp.graded_by = "auto"
+                essay_score += resp.score
+
+            # Add essay scores to existing total (objective already scored at submit time)
+            submission.total_score = round((submission.total_score or 0.0) + essay_score, 4)
+            submission.status = SubmissionStatus.graded
+
+            await db.commit()
+    except Exception as exc:
+        logger.warning("Background essay grading failed for submission %s: %s", submission_id, exc)
 
 
 # ── Start exam ────────────────────────────────────────────────
@@ -153,6 +213,7 @@ async def save_responses(
 @router.post("/{submission_id}/submit", response_model=SubmissionWithResponses)
 async def submit_exam(
     submission_id: uuid.UUID,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> SubmissionWithResponses:
@@ -181,6 +242,7 @@ async def submit_exam(
             continue
 
         q_type = str(q.question_type.value if hasattr(q.question_type, "value") else q.question_type)
+        max_marks = float(getattr(q, "max_marks", 1.0) or 1.0)
 
         if q_type == "essay":
             has_essay = True
@@ -191,7 +253,7 @@ async def submit_exam(
             correct = str(q.correct_answer or "").strip()
             answer = str(resp.student_answer or "").strip()
             resp.is_correct = answer == correct
-            resp.score = 1.0 if resp.is_correct else 0.0
+            resp.score = max_marks if resp.is_correct else 0.0
             total_score += resp.score
         elif q_type == "matching":
             # correct_answer is a JSON array: [{"term": "...", "match": "..."}]
@@ -209,29 +271,45 @@ async def submit_exam(
                            == str(pair.get("match", "")).strip().lower()
                     )
                     resp.is_correct = matched == len(correct_pairs)
-                    resp.score = round(matched / len(correct_pairs), 4)
+                    resp.score = round((matched / len(correct_pairs)) * max_marks, 4)
                     total_score += resp.score
             except (json.JSONDecodeError, KeyError, TypeError, AttributeError):
                 resp.is_correct = False
                 resp.score = 0.0
+        elif q_type == "identification":
+            is_correct, similarity = fuzzy_match_identification(
+                resp.student_answer or "", q.correct_answer or ""
+            )
+            resp.is_correct = is_correct
+            resp.score = round(similarity * max_marks, 4) if is_correct else 0.0
+            resp.feedback = f"Similarity: {int(similarity * 100)}%"
+            resp.graded_by = "auto"
+            total_score += resp.score
         else:
-            # true_false, identification
+            # true_false — exact match
             correct = str(q.correct_answer or "").strip().lower()
             answer = str(resp.student_answer or "").strip().lower()
             resp.is_correct = answer == correct
-            resp.score = 1.0 if resp.is_correct else 0.0
+            resp.score = max_marks if resp.is_correct else 0.0
             total_score += resp.score
 
+    # Compute max_score from question max_marks
+    total_max = sum(float(getattr(q, "max_marks", 1.0) or 1.0) for q in questions.values())
+
     submission.submitted_at = datetime.now(timezone.utc)
-    submission.total_score = total_score
-    submission.status = (
-        SubmissionStatus.pending_review if has_essay else SubmissionStatus.graded
-    )
+    submission.total_score = round(total_score, 4)
+    submission.max_score = total_max
+    # Essays will be graded in the background; keep pending_review until done
+    submission.status = SubmissionStatus.pending_review if has_essay else SubmissionStatus.graded
 
     await db.commit()
     await db.refresh(submission)
     for r in responses:
         await db.refresh(r)
+
+    # Fire background AI grading for essay questions
+    if has_essay:
+        background_tasks.add_task(_grade_essays_bg, submission_id, submission.assessment_id)
 
     return SubmissionWithResponses(
         **SubmissionItem.model_validate(submission).model_dump(),
@@ -349,6 +427,7 @@ async def list_student_assessments(
                 max_score=sub.max_score if sub else None,
                 release_mode=getattr(assessment, "release_mode", "auto") or "auto",
                 grades_released=getattr(assessment, "grades_released", False) or False,
+                release_type=getattr(assessment, "release_type", "none") or "none",
             )
         )
 

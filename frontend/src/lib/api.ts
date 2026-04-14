@@ -128,6 +128,7 @@ export interface QuestionItem {
 }
 
 export type ReleaseMode = "auto" | "manual"
+export type ReleaseType = "none" | "score_only" | "score_with_feedback"
 
 export interface AssessmentItem {
   id: string
@@ -144,6 +145,7 @@ export interface AssessmentItem {
   question_count: number
   release_mode: ReleaseMode
   grades_released: boolean
+  release_type: ReleaseType
   created_at: string
   updated_at: string
 }
@@ -294,6 +296,7 @@ export interface StudentAssessmentItem {
   max_score: number | null
   release_mode: ReleaseMode
   grades_released: boolean
+  release_type: ReleaseType
 }
 
 export interface QuestionAnalysis {
@@ -463,8 +466,11 @@ export const api = {
   gradeSubmissions(assessmentId: string) {
     return req<{ graded: number }>(`/api/v1/assessments/${assessmentId}/grade`, { method: "POST" })
   },
-  releaseGrades(assessmentId: string) {
-    return req<AssessmentItem>(`/api/v1/assessments/${assessmentId}/release-grades`, { method: "POST" })
+  releaseGrades(assessmentId: string, releaseType: ReleaseType) {
+    return req<AssessmentItem>(`/api/v1/assessments/${assessmentId}/release-grades`, {
+      method: "POST",
+      body: JSON.stringify({ release_type: releaseType }),
+    })
   },
   overrideResponse(responseId: string, data: { score?: number; is_correct?: boolean; feedback?: string; teacher_comment?: string }) {
     return req<{ id: string; score: number | null; is_correct: boolean | null; feedback: string | null; teacher_comment: string | null; graded_by: string | null }>(
