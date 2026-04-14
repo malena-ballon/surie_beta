@@ -88,12 +88,19 @@ function ExamAction({
   starting: boolean
 }) {
   if (state === "graded" || state === "pending_review" || state === "submitted") {
+    const gradesVisible = item.release_mode === "auto" || item.grades_released
     return (
       <div className="flex items-center gap-3">
-        <span className="font-display font-semibold text-sm text-ink-primary">
-          {formatScore(item.total_score, item.max_score)}
-        </span>
-        {item.submission_id && (
+        {gradesVisible && state === "graded" ? (
+          <span className="font-display font-semibold text-sm text-ink-primary">
+            {formatScore(item.total_score, item.max_score)}
+          </span>
+        ) : state === "pending_review" || !gradesVisible ? (
+          <span className="text-[12px] font-body text-ink-tertiary italic">
+            {state === "pending_review" ? "Under review" : "Grades not released yet"}
+          </span>
+        ) : null}
+        {item.submission_id && gradesVisible && (
           <Link
             href={`/exam/${item.id}?sub=${item.submission_id}`}
             className="text-[13px] font-medium text-primary-500 hover:text-primary-600 transition-colors"

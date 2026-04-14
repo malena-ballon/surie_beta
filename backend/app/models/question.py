@@ -1,7 +1,7 @@
 import enum
 import uuid
 
-from sqlalchemy import ForeignKey, Integer, JSON, String, Text
+from sqlalchemy import Float, ForeignKey, Integer, JSON, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base
@@ -36,4 +36,5 @@ class Question(Base):
     blooms_level: Mapped[str | None] = mapped_column(String, nullable=True)
     difficulty: Mapped[str | None] = mapped_column(String, nullable=True)
     display_order: Mapped[int] = mapped_column(Integer, nullable=False)
+    max_marks: Mapped[float] = mapped_column(Float, nullable=False, default=1.0, server_default="1.0")
     created_via: Mapped[CreatedVia] = mapped_column(nullable=False)

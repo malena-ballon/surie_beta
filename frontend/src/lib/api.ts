@@ -127,6 +127,8 @@ export interface QuestionItem {
   updated_at: string
 }
 
+export type ReleaseMode = "auto" | "manual"
+
 export interface AssessmentItem {
   id: string
   title: string
@@ -140,6 +142,8 @@ export interface AssessmentItem {
   end_at: string | null
   time_limit_minutes: number | null
   question_count: number
+  release_mode: ReleaseMode
+  grades_released: boolean
   created_at: string
   updated_at: string
 }
@@ -244,27 +248,23 @@ export interface DiagnosticReport {
   generated_at: string
 }
 
-export interface StudentAssessmentItem {
-  id: string
-  title: string
-  class_name: string
-  subject: string
-  difficulty: DifficultyLevel
-  status: AssessmentStatus
-  start_at: string | null
-  end_at: string | null
-  question_count: number
-  submission_id: string | null
-  submission_status: SubmissionStatus | null
-  total_score: number | null
-  max_score: number | null
+export interface RubricCriterion {
+  criterion: string
+  score: number
+  max_score: number
+  feedback: string
 }
 
 export interface StudentResponseItem {
+  id: string
   question_id: string
   student_answer: string | null
   is_correct: boolean | null
   score: number | null
+  graded_by: string | null
+  feedback: string | null
+  rubric: RubricCriterion[] | null
+  teacher_comment: string | null
 }
 
 export interface StudentSubmissionResponse {
@@ -276,6 +276,24 @@ export interface StudentSubmissionResponse {
   max_score: number
   submitted_at: string | null
   responses: StudentResponseItem[]
+}
+
+export interface StudentAssessmentItem {
+  id: string
+  title: string
+  class_name: string
+  subject: string
+  difficulty: DifficultyLevel
+  status: AssessmentStatus
+  start_at: string | null
+  end_at: string | null
+  question_count: number
+  submission_id: string | null
+  submission_status: string | null
+  total_score: number | null
+  max_score: number | null
+  release_mode: ReleaseMode
+  grades_released: boolean
 }
 
 export interface QuestionAnalysis {
@@ -436,11 +454,23 @@ export const api = {
       body: JSON.stringify(data),
     })
   },
-  publishAssessment(id: string, data: { start_at?: string; end_at?: string; time_limit_minutes?: number | null }) {
+  publishAssessment(id: string, data: { start_at?: string; end_at?: string; time_limit_minutes?: number | null; release_mode?: ReleaseMode }) {
     return req<AssessmentItem>(`/api/v1/assessments/${id}/publish`, {
       method: "PUT",
       body: JSON.stringify(data),
     })
+  },
+  gradeSubmissions(assessmentId: string) {
+    return req<{ graded: number }>(`/api/v1/assessments/${assessmentId}/grade`, { method: "POST" })
+  },
+  releaseGrades(assessmentId: string) {
+    return req<AssessmentItem>(`/api/v1/assessments/${assessmentId}/release-grades`, { method: "POST" })
+  },
+  overrideResponse(responseId: string, data: { score?: number; is_correct?: boolean; feedback?: string; teacher_comment?: string }) {
+    return req<{ id: string; score: number | null; is_correct: boolean | null; feedback: string | null; teacher_comment: string | null; graded_by: string | null }>(
+      `/api/v1/responses/${responseId}`,
+      { method: "PATCH", body: JSON.stringify(data) }
+    )
   },
   generateQuestions(id: string, data: GenerateData) {
     return req<QuestionItem[]>(`/api/v1/assessments/${id}/generate`, {

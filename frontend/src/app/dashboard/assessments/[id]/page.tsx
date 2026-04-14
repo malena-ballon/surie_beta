@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import {
   ArrowLeft,
@@ -15,7 +15,11 @@ import {
   CheckCircle2,
   Loader2,
   Download,
+  Eye,
+  EyeOff,
+  GraduationCap,
   RefreshCw,
+  Save,
   Users,
   X,
   Zap,
@@ -40,6 +44,9 @@ import {
   type DiagnosticReport,
   type MasteryLevel,
   type QuestionItem,
+  type RubricCriterion,
+  type StudentResponseItem,
+  type StudentSubmissionResponse,
   type StudentSummary,
   type DifficultyLevel,
   type TopicGroupDetail,
@@ -1776,7 +1783,241 @@ function InlineMarkdown({ text }: { text: string }) {
 
 // ── Page ───────────────────────────────────────────────────────
 
-const TABS = ["Overview", "Student Responses", "Question Analysis"] as const
+// ── Grading tab ────────────────────────────────────────────────
+
+function ResponseOverrideRow({
+  resp,
+  question,
+  onSave,
+}: {
+  resp: StudentResponseItem
+  question: QuestionItem | undefined
+  onSave: (responseId: string, data: { score?: number; feedback?: string; teacher_comment?: string }) => void
+}) {
+  const [score, setScore] = useState(resp.score ?? 0)
+  const [feedback, setFeedback] = useState(resp.feedback ?? "")
+  const [comment, setComment] = useState(resp.teacher_comment ?? "")
+  const [saving, setSaving] = useState(false)
+  const [expanded, setExpanded] = useState(false)
+
+  const maxMarks = (question as QuestionItem & { max_marks?: number })?.max_marks ?? 1
+
+  const handleSave = async () => {
+    setSaving(true)
+    try {
+      await onSave(resp.id, { score, feedback, teacher_comment: comment })
+      toast.success("Grade saved")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const isEssay = question?.question_type === "essay"
+  const gradedByLabel = resp.graded_by === "teacher" ? "Teacher" : resp.graded_by === "auto" ? "AI" : "—"
+
+  return (
+    <div className="border border-border-light rounded-[12px] overflow-hidden">
+      <button
+        onClick={() => setExpanded((v) => !v)}
+        className="w-full flex items-center justify-between px-4 py-3 bg-white hover:bg-surface-secondary transition-colors text-left"
+      >
+        <div className="flex-1 min-w-0 pr-4">
+          <p className="text-[13px] font-body text-ink-primary line-clamp-1">
+            {question?.question_text ?? "Unknown question"}
+          </p>
+          <div className="flex items-center gap-2 mt-0.5">
+            <span className="text-[11px] font-body text-ink-tertiary capitalize">
+              {question?.question_type?.replace("_", "/") ?? "?"}
+            </span>
+            <span className="text-[11px] font-body text-ink-tertiary">· Graded by: {gradedByLabel}</span>
+          </div>
+        </div>
+        <div className="flex items-center gap-3 shrink-0">
+          <span className={cn(
+            "text-[12px] font-semibold font-display px-2 py-0.5 rounded",
+            resp.is_correct === true ? "bg-green-50 text-green-700" :
+            resp.is_correct === false ? "bg-red-50 text-red-600" :
+            "bg-surface-secondary text-ink-tertiary"
+          )}>
+            {resp.score != null ? `${resp.score}/${maxMarks}` : "—"}
+          </span>
+          {expanded ? <ChevronUp className="w-4 h-4 text-ink-tertiary" /> : <ChevronDown className="w-4 h-4 text-ink-tertiary" />}
+        </div>
+      </button>
+
+      {expanded && (
+        <div className="px-4 pb-4 pt-2 bg-surface-secondary space-y-3 border-t border-border-light">
+          {/* Student answer */}
+          <div>
+            <p className="text-[11px] font-semibold font-body text-ink-tertiary uppercase tracking-wide mb-1">Student Answer</p>
+            <p className="text-sm font-body text-ink-primary bg-white rounded-[8px] border border-border-light px-3 py-2 whitespace-pre-wrap">
+              {resp.student_answer || <span className="italic text-ink-tertiary">No answer</span>}
+            </p>
+          </div>
+
+          {/* AI rubric for essays */}
+          {isEssay && resp.rubric && resp.rubric.length > 0 && (
+            <div>
+              <p className="text-[11px] font-semibold font-body text-ink-tertiary uppercase tracking-wide mb-1">AI Rubric</p>
+              <div className="space-y-1.5">
+                {resp.rubric.map((r: RubricCriterion, i: number) => (
+                  <div key={i} className="flex items-start gap-3 bg-white rounded-[8px] border border-border-light px-3 py-2">
+                    <div className="flex-1">
+                      <p className="text-[12px] font-semibold font-body text-ink-primary">{r.criterion}</p>
+                      <p className="text-[11px] font-body text-ink-secondary mt-0.5">{r.feedback}</p>
+                    </div>
+                    <span className="text-[12px] font-semibold font-display text-primary-600 shrink-0">
+                      {r.score}/{r.max_score}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Override score */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-[11px] font-semibold font-body text-ink-tertiary uppercase tracking-wide">
+                Override Score (max {maxMarks})
+              </label>
+              <input
+                type="number"
+                min={0}
+                max={maxMarks}
+                step={0.5}
+                value={score}
+                onChange={(e) => setScore(Math.min(maxMarks, Math.max(0, parseFloat(e.target.value) || 0)))}
+                className="mt-1 w-full h-[36px] px-3 text-sm font-body text-ink-primary bg-white border border-border-default rounded-[8px] focus:outline-none focus:border-primary-500 transition-colors"
+              />
+            </div>
+            <div>
+              <label className="text-[11px] font-semibold font-body text-ink-tertiary uppercase tracking-wide">
+                AI Feedback
+              </label>
+              <input
+                value={feedback}
+                onChange={(e) => setFeedback(e.target.value)}
+                placeholder="Edit AI feedback…"
+                className="mt-1 w-full h-[36px] px-3 text-sm font-body text-ink-primary bg-white border border-border-default rounded-[8px] focus:outline-none focus:border-primary-500 transition-colors"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="text-[11px] font-semibold font-body text-ink-tertiary uppercase tracking-wide">
+              Teacher Comment (visible to student)
+            </label>
+            <textarea
+              value={comment}
+              onChange={(e) => setComment(e.target.value)}
+              placeholder="Add a personal comment for this student…"
+              rows={2}
+              className="mt-1 w-full px-3 py-2 text-sm font-body text-ink-primary bg-white border border-border-default rounded-[8px] focus:outline-none focus:border-primary-500 transition-colors resize-none"
+            />
+          </div>
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-[8px] bg-primary-500 text-white text-[12px] font-semibold font-body hover:bg-primary-600 disabled:opacity-50 transition-colors"
+          >
+            {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+            Save Override
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function GradingTab({
+  responses,
+  questions,
+  onOverride,
+}: {
+  responses: AssessmentResponses
+  questions: QuestionItem[]
+  onOverride: (responseId: string, data: { score?: number; feedback?: string; teacher_comment?: string }) => void
+}) {
+  const [selectedStudent, setSelectedStudent] = useState<string | null>(
+    responses.student_responses[0]?.submission_id ?? null
+  )
+
+  const qMap = Object.fromEntries(questions.map((q) => [q.id, q]))
+  const current = responses.student_responses.find((s) => s.submission_id === selectedStudent)
+
+  const statusColor = (s: StudentSubmissionResponse) => {
+    if (s.status === "graded") return "text-green-700 bg-green-50"
+    if (s.status === "pending_review") return "text-amber-700 bg-amber-50"
+    return "text-ink-tertiary bg-surface-secondary"
+  }
+
+  return (
+    <div className="flex gap-5 min-h-[400px]">
+      {/* Student list */}
+      <div className="w-56 shrink-0 bg-white rounded-[14px] border border-border-light overflow-hidden flex flex-col">
+        <div className="px-4 py-3 border-b border-border-light">
+          <p className="font-display font-semibold text-sm text-ink-primary">Students</p>
+          <p className="text-[11px] font-body text-ink-tertiary">{responses.student_responses.length} submissions</p>
+        </div>
+        <div className="flex-1 overflow-y-auto divide-y divide-border-light">
+          {responses.student_responses.map((s) => (
+            <button
+              key={s.submission_id}
+              onClick={() => setSelectedStudent(s.submission_id)}
+              className={cn(
+                "w-full text-left px-4 py-3 transition-colors",
+                selectedStudent === s.submission_id ? "bg-primary-50" : "hover:bg-surface-secondary"
+              )}
+            >
+              <p className="text-[13px] font-body font-medium text-ink-primary truncate">{s.student_name}</p>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <span className={cn("text-[10px] font-semibold px-1.5 py-0.5 rounded capitalize", statusColor(s))}>
+                  {s.status.replace("_", " ")}
+                </span>
+                {s.total_score != null && (
+                  <span className="text-[10px] font-body text-ink-tertiary">
+                    {s.total_score}/{s.max_score}
+                  </span>
+                )}
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Response detail */}
+      <div className="flex-1 min-w-0 space-y-3">
+        {current ? (
+          <>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="font-display font-semibold text-base text-ink-primary">{current.student_name}</p>
+                <p className="text-[12px] font-body text-ink-tertiary">
+                  Score: {current.total_score ?? "—"} / {current.max_score}
+                  {current.submitted_at && ` · Submitted ${new Date(current.submitted_at).toLocaleDateString("en-PH", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}`}
+                </p>
+              </div>
+            </div>
+            {current.responses.map((resp) => (
+              <ResponseOverrideRow
+                key={resp.id}
+                resp={resp}
+                question={qMap[resp.question_id]}
+                onSave={onOverride}
+              />
+            ))}
+          </>
+        ) : (
+          <div className="flex items-center justify-center h-full text-ink-tertiary font-body text-sm">
+            Select a student to review their responses.
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+const TABS = ["Overview", "Grading", "Student Responses", "Question Analysis"] as const
 type TabName = typeof TABS[number]
 
 export default function AssessmentDiagnosticPage() {
@@ -1793,6 +2034,8 @@ export default function AssessmentDiagnosticPage() {
   const [showReviewerModal, setShowReviewerModal] = useState(false)
   const [activeTab, setActiveTab] = useState<TabName>("Overview")
   const [responsesLoading, setResponsesLoading] = useState(false)
+  const [grading, setGrading] = useState(false)
+  const [releasing, setReleasing] = useState(false)
 
   useEffect(() => {
     async function load() {
@@ -1827,7 +2070,8 @@ export default function AssessmentDiagnosticPage() {
 
   // Still lazy-load for tab switches if not yet loaded
   useEffect(() => {
-    if ((activeTab === "Student Responses" || activeTab === "Question Analysis") && !responses) {
+    const needsResponses = activeTab === "Student Responses" || activeTab === "Question Analysis" || activeTab === "Grading"
+    if (needsResponses && !responses) {
       setResponsesLoading(true)
       api.getAssessmentResponses(id)
         .then(setResponses)
@@ -1848,6 +2092,36 @@ export default function AssessmentDiagnosticPage() {
       toast.error(err instanceof Error ? err.message : "Sync failed")
     } finally {
       setSyncing(false)
+    }
+  }
+
+  const handleGrade = async () => {
+    if (!assessment) return
+    setGrading(true)
+    try {
+      const result = await api.gradeSubmissions(assessment.id)
+      toast.success(`AI graded ${result.graded} submission${result.graded !== 1 ? "s" : ""}`)
+      // Refresh responses
+      const r2 = await api.getAssessmentResponses(assessment.id)
+      setResponses(r2)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Grading failed")
+    } finally {
+      setGrading(false)
+    }
+  }
+
+  const handleRelease = async () => {
+    if (!assessment) return
+    setReleasing(true)
+    try {
+      const updated = await api.releaseGrades(assessment.id)
+      setAssessment((prev) => prev ? { ...prev, grades_released: updated.grades_released } : prev)
+      toast.success("Grades released to students!")
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Release failed")
+    } finally {
+      setReleasing(false)
     }
   }
 
@@ -1911,7 +2185,7 @@ export default function AssessmentDiagnosticPage() {
             )}
           </p>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
           <Button variant="secondary" size="sm" onClick={() => toast.info("Export coming soon")}>
             <Download className="w-4 h-4" />
             <span className="hidden sm:inline">Export</span>
@@ -1920,6 +2194,24 @@ export default function AssessmentDiagnosticPage() {
             <RefreshCw className={cn("w-4 h-4", syncing && "animate-spin")} />
             <span className="hidden sm:inline">{syncing ? "Syncing…" : "Sync"}</span>
           </Button>
+          {/* AI Grade button — only when there are pending submissions */}
+          <Button variant="secondary" size="sm" onClick={handleGrade} disabled={grading}>
+            <GraduationCap className={cn("w-4 h-4", grading && "animate-pulse")} />
+            <span className="hidden sm:inline">{grading ? "Grading…" : "AI Grade"}</span>
+          </Button>
+          {/* Release Grades — only when manual mode and not yet released */}
+          {assessment.release_mode === "manual" && !assessment.grades_released && (
+            <Button variant="gradient" size="sm" onClick={handleRelease} disabled={releasing}>
+              <Eye className="w-4 h-4" />
+              <span className="hidden sm:inline">{releasing ? "Releasing…" : "Release Grades"}</span>
+            </Button>
+          )}
+          {assessment.release_mode === "manual" && assessment.grades_released && (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-50 border border-green-200 text-green-700 text-[12px] font-semibold font-body">
+              <Eye className="w-3.5 h-3.5" />
+              Grades Released
+            </div>
+          )}
           {report && (
             <>
               <Button variant="secondary" size="sm" onClick={() => setShowReviewerModal(true)}>
@@ -1975,6 +2267,38 @@ export default function AssessmentDiagnosticPage() {
               </button>
             ))}
           </div>
+
+          {/* ── Grading tab ── */}
+          {activeTab === "Grading" && (
+            responsesLoading
+              ? <div className="space-y-3">{[0,1,2].map((i) => <Skeleton key={i} className="h-16 rounded-[14px]" />)}</div>
+              : responses
+              ? (
+                <GradingTab
+                  responses={responses}
+                  questions={assessment.questions}
+                  onOverride={async (responseId, data) => {
+                    try {
+                      await api.overrideResponse(responseId, data)
+                      const r2 = await api.getAssessmentResponses(assessment.id)
+                      setResponses(r2)
+                    } catch (err) {
+                      toast.error(err instanceof Error ? err.message : "Override failed")
+                    }
+                  }}
+                />
+              )
+              : (
+                <div className="bg-white rounded-[14px] border border-border-light p-10 text-center space-y-3">
+                  <GraduationCap className="w-8 h-8 text-ink-tertiary/40 mx-auto" strokeWidth={1.5} />
+                  <p className="font-body text-sm text-ink-secondary">No submissions yet, or responses not loaded.</p>
+                  <Button variant="secondary" size="sm" onClick={handleGrade} disabled={grading}>
+                    <GraduationCap className="w-4 h-4" />
+                    {grading ? "Grading…" : "Run AI Grading"}
+                  </Button>
+                </div>
+              )
+          )}
 
           {/* ── Overview tab ── */}
           {activeTab === "Overview" && report && (

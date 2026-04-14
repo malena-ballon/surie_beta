@@ -22,8 +22,10 @@ from app.schemas.assessments import (
     QuestionItem,
     QuestionUpdate,
     ReorderRequest,
+    TeacherResponseOverride,
 )
 from app.services.ai_generation import generate_exam_questions
+from app.services.ai_grading import fuzzy_match_identification, grade_essay
 
 router = APIRouter()
 
@@ -65,6 +67,8 @@ def _to_item(assessment: Assessment, question_count: int) -> AssessmentItem:
         end_at=assessment.end_at,
         time_limit_minutes=assessment.time_limit_minutes,
         question_count=question_count,
+        release_mode=getattr(assessment, "release_mode", "auto") or "auto",
+        grades_released=getattr(assessment, "grades_released", False) or False,
         created_at=assessment.created_at,
         updated_at=assessment.updated_at,
     )
@@ -217,6 +221,12 @@ async def publish_assessment(
         assessment.start_at = body.start_at
     if body.end_at is not None:
         assessment.end_at = body.end_at
+    if body.time_limit_minutes is not None:
+        assessment.time_limit_minutes = body.time_limit_minutes
+    assessment.release_mode = body.release_mode
+    # For auto-release, grades are always visible to students immediately
+    if body.release_mode == "auto":
+        assessment.grades_released = True
     await db.commit()
     await db.refresh(assessment)
     return _to_item(assessment, await _question_count(assessment.id, db))
@@ -381,6 +391,174 @@ async def generate_questions(
             return [QuestionItem.model_validate(q) for q in questions]
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Failed to save generated questions: {exc}")
+
+
+# ── AI grade all submissions ──────────────────────────────────
+
+from app.models.response import Response as ResponseModel  # noqa: E402
+from app.models.submission import Submission, SubmissionStatus  # noqa: E402
+
+
+@router.post("/{assessment_id}/grade", response_model=dict)
+async def grade_submissions(
+    assessment_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """AI-grade all ungraded (pending_review) submissions for this assessment."""
+    assessment = await _get_assessment_or_403(assessment_id, db, current_user)
+
+    # Fetch all pending_review submissions
+    sub_result = await db.execute(
+        select(Submission).where(
+            Submission.assessment_id == assessment_id,
+            Submission.status == SubmissionStatus.pending_review,
+        )
+    )
+    submissions = sub_result.scalars().all()
+
+    # Fetch questions keyed by id
+    q_result = await db.execute(
+        select(Question).where(Question.assessment_id == assessment_id)
+    )
+    questions = {q.id: q for q in q_result.scalars().all()}
+
+    graded_count = 0
+    for sub in submissions:
+        r_result = await db.execute(
+            select(ResponseModel).where(ResponseModel.submission_id == sub.id)
+        )
+        responses = r_result.scalars().all()
+
+        total_score = 0.0
+        for resp in responses:
+            q = questions.get(resp.question_id)
+            if not q:
+                continue
+            q_type = str(q.question_type.value if hasattr(q.question_type, "value") else q.question_type)
+            max_marks = float(getattr(q, "max_marks", 1.0) or 1.0)
+
+            if resp.score is not None and q_type != "essay":
+                # Already graded (objective)
+                total_score += resp.score * max_marks
+                continue
+
+            if q_type == "essay":
+                result = await grade_essay(
+                    question_text=q.question_text,
+                    model_answer=q.correct_answer or "",
+                    student_answer=resp.student_answer or "",
+                    max_marks=max_marks,
+                )
+                resp.score = result["total_score"]
+                resp.rubric = result["rubric"]
+                resp.feedback = result["overall_comment"]
+                resp.is_correct = resp.score >= (max_marks * 0.5)
+                resp.graded_by = "auto"
+                total_score += resp.score
+
+            elif q_type == "identification":
+                is_correct, similarity = fuzzy_match_identification(
+                    resp.student_answer or "", q.correct_answer or ""
+                )
+                resp.is_correct = is_correct
+                resp.score = round(similarity * max_marks, 4) if is_correct else 0.0
+                resp.feedback = f"Similarity: {int(similarity * 100)}%"
+                resp.graded_by = "auto"
+                total_score += resp.score
+
+            else:
+                # Objective already handled; shouldn't get here but keep score
+                if resp.score is not None:
+                    total_score += resp.score * max_marks
+
+        sub.total_score = round(total_score, 4)
+        sub.status = SubmissionStatus.graded
+        graded_count += 1
+
+    # Recompute max_score based on question max_marks
+    total_max = sum(float(getattr(q, "max_marks", 1.0) or 1.0) for q in questions.values())
+    for sub in submissions:
+        sub.max_score = total_max
+
+    await db.commit()
+    return {"graded": graded_count}
+
+
+# ── Release grades ────────────────────────────────────────────
+
+
+@router.post("/{assessment_id}/release-grades", response_model=AssessmentItem)
+async def release_grades(
+    assessment_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> AssessmentItem:
+    """Mark grades as released so students can see their scores and feedback."""
+    assessment = await _get_assessment_or_403(assessment_id, db, current_user)
+    assessment.grades_released = True
+    await db.commit()
+    await db.refresh(assessment)
+    return _to_item(assessment, await _question_count(assessment.id, db))
+
+
+# ── Teacher response override ─────────────────────────────────
+
+
+questions_router_responses = APIRouter()
+
+
+@questions_router_responses.patch("/{response_id}", response_model=dict)
+async def override_response(
+    response_id: uuid.UUID,
+    body: TeacherResponseOverride,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Teacher overrides AI grade/feedback on a student response."""
+    result = await db.execute(select(ResponseModel).where(ResponseModel.id == response_id))
+    resp = result.scalar_one_or_none()
+    if not resp:
+        raise HTTPException(status_code=404, detail="Response not found")
+
+    # Verify teacher owns the assessment via question → submission → assessment
+    sub_result = await db.execute(
+        select(Submission).where(Submission.id == resp.submission_id)
+    )
+    submission = sub_result.scalar_one_or_none()
+    if not submission:
+        raise HTTPException(status_code=404, detail="Submission not found")
+
+    await _get_assessment_or_403(submission.assessment_id, db, current_user)
+
+    if body.score is not None:
+        resp.score = body.score
+    if body.is_correct is not None:
+        resp.is_correct = body.is_correct
+    if body.feedback is not None:
+        resp.feedback = body.feedback
+    if body.teacher_comment is not None:
+        resp.teacher_comment = body.teacher_comment
+    resp.graded_by = "teacher"
+
+    # Recalculate submission total_score
+    all_responses = await db.execute(
+        select(ResponseModel).where(ResponseModel.submission_id == submission.id)
+    )
+    submission.total_score = round(
+        sum(r.score for r in all_responses.scalars().all() if r.score is not None), 4
+    )
+
+    await db.commit()
+    await db.refresh(resp)
+    return {
+        "id": str(resp.id),
+        "score": resp.score,
+        "is_correct": resp.is_correct,
+        "feedback": resp.feedback,
+        "teacher_comment": resp.teacher_comment,
+        "graded_by": resp.graded_by,
+    }
 
 
 # ── Update question ───────────────────────────────────────────

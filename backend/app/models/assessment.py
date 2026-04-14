@@ -2,7 +2,7 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, String
+from sqlalchemy import Boolean, DateTime, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base
@@ -44,3 +44,9 @@ class Assessment(Base):
     )
     start_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     end_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    release_mode: Mapped[str] = mapped_column(
+        String(10), nullable=False, default="auto", server_default="auto"
+    )
+    grades_released: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )

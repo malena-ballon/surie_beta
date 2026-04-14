@@ -347,6 +347,8 @@ async def list_student_assessments(
                 submission_status=sub.status.value if sub and hasattr(sub.status, "value") else (sub.status if sub else None),
                 total_score=sub.total_score if sub else None,
                 max_score=sub.max_score if sub else None,
+                release_mode=getattr(assessment, "release_mode", "auto") or "auto",
+                grades_released=getattr(assessment, "grades_released", False) or False,
             )
         )
 

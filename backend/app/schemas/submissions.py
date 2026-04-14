@@ -21,6 +21,9 @@ class ResponseItem(BaseModel):
     is_correct: bool | None
     score: float | None
     graded_by: str | None
+    feedback: str | None = None
+    rubric: list | None = None
+    teacher_comment: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -95,3 +98,5 @@ class StudentAssessmentItem(BaseModel):
     submission_status: str | None
     total_score: float | None
     max_score: int | None
+    release_mode: str = "auto"
+    grades_released: bool = False

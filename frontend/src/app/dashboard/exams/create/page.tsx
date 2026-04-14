@@ -1499,6 +1499,9 @@ function Step3({ assessment, questions, classes }: Step3Props) {
       ? String(assessment.time_limit_minutes % 60).padStart(2, "0")
       : ""
   )
+  const [releaseMode, setReleaseMode] = useState<"auto" | "manual">(
+    (assessment.release_mode as "auto" | "manual") ?? "auto"
+  )
   const [publishing, setPublishing] = useState(false)
 
   const cls = classes.find((c) => c.id === assessment.class_id)
@@ -1516,6 +1519,7 @@ function Step3({ assessment, questions, classes }: Step3Props) {
         start_at: startAt ? new Date(startAt).toISOString() : undefined,
         end_at: endAt ? new Date(endAt).toISOString() : undefined,
         time_limit_minutes: timeLimitMinutes,
+        release_mode: releaseMode,
       })
       toast.success("Assessment published!")
       router.push("/dashboard/exams")
@@ -1635,6 +1639,48 @@ function Step3({ assessment, questions, classes }: Step3Props) {
               </p>
             )}
           </div>
+        </div>
+      </div>
+
+      {/* Grade Release */}
+      <div className="bg-white rounded-[14px] border border-border-light shadow-card p-6 space-y-4">
+        <h3 className="font-display font-semibold text-base text-ink-primary">
+          Grade Release
+        </h3>
+        <p className="text-[12px] font-body text-ink-tertiary -mt-2">
+          Choose when students will see their scores and feedback.
+        </p>
+        <div className="space-y-3">
+          {(["auto", "manual"] as const).map((mode) => (
+            <label
+              key={mode}
+              className={cn(
+                "flex items-start gap-3 p-4 rounded-[12px] border-2 cursor-pointer transition-all",
+                releaseMode === mode
+                  ? "border-primary-500 bg-primary-50"
+                  : "border-border-light hover:border-primary-200"
+              )}
+            >
+              <input
+                type="radio"
+                name="releaseMode"
+                value={mode}
+                checked={releaseMode === mode}
+                onChange={() => setReleaseMode(mode)}
+                className="mt-0.5 accent-primary-500"
+              />
+              <div>
+                <p className="text-sm font-semibold font-body text-ink-primary">
+                  {mode === "auto" ? "Release automatically after submission" : "Manual release by teacher"}
+                </p>
+                <p className="text-[12px] font-body text-ink-tertiary mt-0.5">
+                  {mode === "auto"
+                    ? "Students see their score and AI feedback immediately after submitting."
+                    : "Grades are hidden until you click Release Grades in the Reports page. Use this when you want to review and adjust AI-generated scores first."}
+                </p>
+              </div>
+            </label>
+          ))}
         </div>
       </div>
 

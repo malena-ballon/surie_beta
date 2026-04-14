@@ -1,7 +1,7 @@
 import enum
 import uuid
 
-from sqlalchemy import Boolean, Float, ForeignKey, Text
+from sqlalchemy import Boolean, Float, ForeignKey, JSON, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base
@@ -25,3 +25,6 @@ class Response(Base):
     is_correct: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     score: Mapped[float | None] = mapped_column(Float, nullable=True)
     graded_by: Mapped[GradedBy | None] = mapped_column(nullable=True)
+    feedback: Mapped[str | None] = mapped_column(Text, nullable=True)
+    rubric: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    teacher_comment: Mapped[str | None] = mapped_column(Text, nullable=True)

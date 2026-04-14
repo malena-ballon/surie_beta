@@ -19,6 +19,7 @@ class QuestionCreate(BaseModel):
     blooms_level: str | None = None
     difficulty: str | None = None
     display_order: int
+    max_marks: float = 1.0
     created_via: CreatedVia = CreatedVia.manual
 
 
@@ -32,6 +33,7 @@ class QuestionUpdate(BaseModel):
     blooms_level: str | None = None
     difficulty: str | None = None
     display_order: int | None = None
+    max_marks: float | None = None
 
 
 class QuestionItem(BaseModel):
@@ -46,6 +48,7 @@ class QuestionItem(BaseModel):
     blooms_level: str | None
     difficulty: str | None
     display_order: int
+    max_marks: float
     created_via: CreatedVia
     created_at: datetime
     updated_at: datetime
@@ -88,6 +91,7 @@ class PublishRequest(BaseModel):
     start_at: datetime | None = None
     end_at: datetime | None = None
     time_limit_minutes: int | None = None
+    release_mode: str = "auto"
 
 
 class AssessmentItem(BaseModel):
@@ -103,10 +107,19 @@ class AssessmentItem(BaseModel):
     end_at: datetime | None
     time_limit_minutes: int | None
     question_count: int
+    release_mode: str
+    grades_released: bool
     created_at: datetime
     updated_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class TeacherResponseOverride(BaseModel):
+    score: float | None = None
+    is_correct: bool | None = None
+    feedback: str | None = None
+    teacher_comment: str | None = None
 
 
 class AssessmentDetail(AssessmentItem):
