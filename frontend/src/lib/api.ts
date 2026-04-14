@@ -299,6 +299,52 @@ export interface StudentAssessmentItem {
   release_type: ReleaseType
 }
 
+// ── Student Analytics ──────────────────────────────────────────
+
+export interface AnalyticsSubtopic {
+  name: string
+  student_score_pct: number
+  class_avg_pct: number
+  questions_count: number
+}
+
+export interface AnalyticsTrendPoint {
+  exam_id: string
+  title: string
+  date: string
+  score_pct: number
+}
+
+export interface AnalyticsMastery {
+  subtopic: string
+  avg_score_pct: number
+  level: string
+  exam_count: number
+  trend: AnalyticsTrendPoint[]
+}
+
+export interface AnalyticsExam {
+  assessment_id: string
+  submission_id: string
+  title: string
+  class_name: string
+  subject: string
+  submitted_at: string | null
+  status: string
+  total_score: number | null
+  max_score: number | null
+  total_score_pct: number | null
+  percentile: number
+  subtopics: AnalyticsSubtopic[]
+}
+
+export interface StudentAnalytics {
+  exams: AnalyticsExam[]
+  overall_mastery: AnalyticsMastery[]
+  classes: { id: string; name: string; subject: string }[]
+  all_assessments: { id: string; title: string; class_name: string }[]
+}
+
 export interface QuestionAnalysis {
   question_id: string
   question_text: string
@@ -562,6 +608,13 @@ export const api = {
   // Student
   getStudentAssessments() {
     return req<StudentAssessmentItem[]>("/api/v1/submissions/students/assessments")
+  },
+  getStudentAnalytics(params?: { classId?: string; assessmentId?: string }) {
+    const qs = new URLSearchParams()
+    if (params?.classId) qs.set("class_id", params.classId)
+    if (params?.assessmentId) qs.set("assessment_id", params.assessmentId)
+    const query = qs.toString() ? `?${qs.toString()}` : ""
+    return req<StudentAnalytics>(`/api/v1/student/analytics${query}`)
   },
   startExam(assessmentId: string) {
     return req<{ id: string; status: string; questions: unknown[] }>("/api/v1/submissions", {

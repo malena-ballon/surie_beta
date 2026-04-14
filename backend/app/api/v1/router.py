@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api.v1.endpoints import auth, assessments, classes, dashboard, diagnostics, materials, questions, reviewers, submissions
+from app.api.v1.endpoints import auth, assessments, classes, dashboard, diagnostics, materials, questions, reviewers, student_analytics, submissions
 
 router = APIRouter()
 router.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
@@ -14,3 +14,4 @@ router.include_router(diagnostics.router, prefix="/api/v1/assessments", tags=["d
 router.include_router(reviewers.router, prefix="/api/v1/reviewers", tags=["reviewers"])
 router.include_router(materials.router, prefix="/api/v1/materials", tags=["materials"])
 router.include_router(submissions.router, prefix="/api/v1/submissions", tags=["submissions"])
+router.include_router(student_analytics.router, prefix="/api/v1/student", tags=["student"])

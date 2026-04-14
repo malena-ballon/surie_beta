@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useParams, useRouter, useSearchParams } from "next/navigation"
-import { Check, ChevronLeft, ChevronRight, Clock } from "lucide-react"
+import { ArrowLeft, Check, CheckCircle2, ChevronLeft, ChevronRight, Clock, X, XCircle } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 
@@ -70,6 +70,345 @@ interface SubmissionResult {
   max_score: number
   submitted_at: string | null
   responses: { question_id: string; is_correct: boolean | null; score: number | null }[]
+}
+
+// ── Review types ───────────────────────────────────────────────
+
+interface RubricCriterion {
+  criterion: string
+  score: number
+  max_score: number
+  feedback: string
+}
+
+interface ReviewQuestion {
+  id: string
+  question_text: string
+  question_type: string
+  question_type_label: string
+  choices: Choice[] | null
+  correct_answer: string | null
+  explanation: string | null
+  subtopic_tags: string[] | null
+  display_order: number
+  max_marks: number
+  student_answer: string | null
+  is_correct: boolean | null
+  score: number | null
+  feedback: string | null
+  rubric: RubricCriterion[] | null
+  teacher_comment: string | null
+}
+
+interface ReviewData {
+  submission_id: string
+  assessment_id: string
+  assessment_title: string
+  status: string
+  submitted_at: string | null
+  total_score: number | null
+  max_score: number | null
+  grades_released: boolean
+  release_type: string
+  questions: ReviewQuestion[]
+}
+
+// ── Detailed Review Screen ─────────────────────────────────────
+
+function DetailedReviewScreen({
+  review,
+  onReturn,
+}: {
+  review: ReviewData
+  onReturn: () => void
+}) {
+  const pct =
+    review.max_score && review.max_score > 0
+      ? Math.round(((review.total_score ?? 0) / review.max_score) * 100)
+      : 0
+
+  const radius = 54
+  const circ = 2 * Math.PI * radius
+  const offset = circ - (pct / 100) * circ
+
+  const scoreColor =
+    pct >= 90 ? "#1565C0" : pct >= 75 ? "#2E7D32" : pct >= 60 ? "#F57F17" : "#C62828"
+
+  return (
+    <div className="min-h-screen bg-[#FAF8F5]">
+      {/* Top bar */}
+      <div className="sticky top-0 z-40 bg-white/90 backdrop-blur border-b border-border-light px-4 md:px-8 h-14 flex items-center gap-3">
+        <button
+          onClick={onReturn}
+          className="flex items-center gap-1.5 text-[13px] font-body text-ink-tertiary hover:text-ink-primary transition-colors"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Back to My Exams
+        </button>
+        <span className="text-ink-tertiary font-body text-[13px]">/</span>
+        <span className="font-body text-[13px] text-ink-primary font-medium truncate">
+          {review.assessment_title}
+        </span>
+      </div>
+
+      <div className="max-w-[800px] mx-auto px-4 py-8 space-y-6">
+        {/* Score header card */}
+        <div className="bg-white rounded-2xl shadow-card p-8 flex items-center gap-8">
+          <div className="relative w-32 h-32 shrink-0">
+            <svg className="w-full h-full -rotate-90" viewBox="0 0 128 128">
+              <circle cx="64" cy="64" r={radius} fill="none" stroke="#F0F0F0" strokeWidth="12" />
+              <circle
+                cx="64" cy="64" r={radius}
+                fill="none"
+                stroke={scoreColor}
+                strokeWidth="12"
+                strokeDasharray={circ}
+                strokeDashoffset={offset}
+                strokeLinecap="round"
+                className="transition-all duration-1000"
+              />
+            </svg>
+            <div className="absolute inset-0 flex flex-col items-center justify-center">
+              <span className="font-display font-bold text-2xl text-ink-primary">{pct}%</span>
+              <span className="font-body text-[11px] text-ink-tertiary">
+                {review.total_score ?? 0}/{review.max_score}
+              </span>
+            </div>
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-[11px] font-semibold uppercase tracking-widest text-ink-tertiary font-body mb-1">
+              Exam Results
+            </p>
+            <h1 className="font-display font-bold text-xl text-ink-primary leading-tight mb-2">
+              {review.assessment_title}
+            </h1>
+            {review.submitted_at && (
+              <p className="font-body text-[13px] text-ink-secondary">
+                Submitted{" "}
+                {new Date(review.submitted_at).toLocaleDateString("en-PH", {
+                  month: "long",
+                  day: "numeric",
+                  year: "numeric",
+                })}
+              </p>
+            )}
+            <div className="mt-3 flex gap-4">
+              <div className="text-center">
+                <p className="font-display font-bold text-lg" style={{ color: scoreColor }}>
+                  {review.total_score ?? 0}
+                </p>
+                <p className="text-[11px] font-body text-ink-tertiary">Your Score</p>
+              </div>
+              <div className="text-center">
+                <p className="font-display font-bold text-lg text-ink-primary">
+                  {review.max_score ?? 0}
+                </p>
+                <p className="text-[11px] font-body text-ink-tertiary">Total Marks</p>
+              </div>
+              <div className="text-center">
+                <p className="font-display font-bold text-lg text-ink-primary">
+                  {review.questions.length}
+                </p>
+                <p className="text-[11px] font-body text-ink-tertiary">Questions</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Per-question breakdown */}
+        <div className="space-y-4">
+          {review.questions.map((q, i) => {
+            const isCorrect = q.is_correct === true
+            const isWrong = q.is_correct === false
+            const scorePct =
+              q.max_marks > 0 && q.score != null
+                ? Math.round((q.score / q.max_marks) * 100)
+                : null
+
+            return (
+              <div
+                key={q.id}
+                className={cn(
+                  "bg-white rounded-2xl border shadow-card overflow-hidden",
+                  isCorrect ? "border-green-200" : isWrong ? "border-red-200" : "border-border-light"
+                )}
+              >
+                {/* Question header */}
+                <div
+                  className={cn(
+                    "flex items-center justify-between px-6 py-3 border-b",
+                    isCorrect
+                      ? "bg-green-50 border-green-100"
+                      : isWrong
+                      ? "bg-red-50 border-red-100"
+                      : "bg-surface-secondary border-border-light"
+                  )}
+                >
+                  <div className="flex items-center gap-2">
+                    {isCorrect ? (
+                      <CheckCircle2 className="w-4 h-4 text-green-600 shrink-0" />
+                    ) : isWrong ? (
+                      <XCircle className="w-4 h-4 text-red-500 shrink-0" />
+                    ) : null}
+                    <span className="font-body text-[12px] font-semibold text-ink-tertiary uppercase tracking-wide">
+                      Q{i + 1} &bull; {q.question_type_label}
+                      {q.subtopic_tags?.[0] && (
+                        <span className="ml-2 normal-case text-primary-500">[{q.subtopic_tags[0]}]</span>
+                      )}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span
+                      className={cn(
+                        "font-display font-bold text-sm",
+                        isCorrect ? "text-green-700" : isWrong ? "text-red-600" : "text-ink-secondary"
+                      )}
+                    >
+                      {q.score ?? "—"}/{q.max_marks}
+                    </span>
+                    {scorePct !== null && (
+                      <span className="font-body text-[11px] text-ink-tertiary">({scorePct}%)</span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Body */}
+                <div className="px-6 py-5 space-y-4">
+                  {/* Question text */}
+                  <p className="font-body text-[15px] text-ink-primary leading-relaxed">
+                    {q.question_text}
+                  </p>
+
+                  {/* Answer grid */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {/* Student's answer */}
+                    <div className="rounded-xl border border-border-light bg-surface-secondary p-4">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-tertiary mb-1.5">
+                        Your Answer
+                      </p>
+                      <p
+                        className={cn(
+                          "font-body text-sm font-medium",
+                          isCorrect
+                            ? "text-green-700"
+                            : isWrong
+                            ? "text-red-600"
+                            : "text-ink-secondary"
+                        )}
+                      >
+                        {q.student_answer
+                          ? q.question_type === "matching"
+                            ? (() => {
+                                try {
+                                  const m = JSON.parse(q.student_answer)
+                                  return Object.entries(m)
+                                    .map(([t, v]) => `${t} → ${v}`)
+                                    .join(", ")
+                                } catch {
+                                  return q.student_answer
+                                }
+                              })()
+                            : q.student_answer
+                          : <span className="italic text-ink-tertiary">No answer</span>}
+                      </p>
+                    </div>
+
+                    {/* Correct answer */}
+                    {q.correct_answer != null && (
+                      <div className="rounded-xl border border-green-200 bg-green-50 p-4">
+                        <p className="text-[11px] font-semibold uppercase tracking-wide text-green-700 mb-1.5">
+                          {q.question_type === "essay" ? "Model Answer" : "Correct Answer"}
+                        </p>
+                        <p className="font-body text-sm text-green-800">
+                          {q.question_type === "matching"
+                            ? (() => {
+                                try {
+                                  const pairs = JSON.parse(q.correct_answer)
+                                  return pairs.map((p: { term: string; match: string }) => `${p.term} → ${p.match}`).join(", ")
+                                } catch {
+                                  return q.correct_answer
+                                }
+                              })()
+                            : q.correct_answer}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Essay rubric */}
+                  {q.rubric && q.rubric.length > 0 && (
+                    <div className="rounded-xl border border-border-light overflow-hidden">
+                      <div className="px-4 py-2 bg-surface-secondary border-b border-border-light">
+                        <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-tertiary">
+                          Scoring Rubric
+                        </p>
+                      </div>
+                      <div className="divide-y divide-border-light">
+                        {q.rubric.map((criterion, ci) => (
+                          <div key={ci} className="px-4 py-3 flex items-start justify-between gap-4">
+                            <div className="flex-1 min-w-0">
+                              <p className="font-body text-[13px] font-semibold text-ink-primary">
+                                {criterion.criterion}
+                              </p>
+                              {criterion.feedback && (
+                                <p className="font-body text-[12px] text-ink-secondary mt-0.5">
+                                  {criterion.feedback}
+                                </p>
+                              )}
+                            </div>
+                            <span className="font-display font-bold text-sm text-ink-primary shrink-0">
+                              {criterion.score}/{criterion.max_score}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* AI feedback */}
+                  {q.feedback && (
+                    <div className="rounded-xl bg-blue-50 border border-blue-100 px-4 py-3">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-blue-600 mb-1">
+                        Feedback
+                      </p>
+                      <p className="font-body text-[13px] text-blue-900">{q.feedback}</p>
+                    </div>
+                  )}
+
+                  {/* Teacher comment */}
+                  {q.teacher_comment && (
+                    <div className="rounded-xl bg-amber-50 border border-amber-100 px-4 py-3">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-700 mb-1">
+                        Teacher Comment
+                      </p>
+                      <p className="font-body text-[13px] text-amber-900">{q.teacher_comment}</p>
+                    </div>
+                  )}
+
+                  {/* Explanation */}
+                  {q.explanation && (
+                    <div className="rounded-xl bg-surface-secondary border border-border-light px-4 py-3">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-tertiary mb-1">
+                        Explanation
+                      </p>
+                      <p className="font-body text-[13px] text-ink-secondary">{q.explanation}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+
+        <button
+          onClick={onReturn}
+          className="w-full py-3 rounded-xl bg-gradient-to-r from-primary-500 to-accent-500 text-white font-semibold font-body text-sm hover:opacity-90 transition-opacity"
+        >
+          Back to My Exams
+        </button>
+      </div>
+    </div>
+  )
 }
 
 // ── Countdown timer ────────────────────────────────────────────
@@ -389,6 +728,7 @@ export default function ExamPage() {
   const [starting, setStarting] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [result, setResult] = useState<SubmissionResult | null>(null)
+  const [reviewData, setReviewData] = useState<ReviewData | null>(null)
   const [showConfirm, setShowConfirm] = useState(false)
   const secs = useCountdown(
     submission?.started_at ?? null,
@@ -415,7 +755,18 @@ export default function ExamPage() {
         // Check submission status first
         const subResult = await req<SubmissionResult>(`/api/v1/submissions/${existingSubId}`)
         if (subResult.status !== "in_progress") {
-          // Already submitted/graded — show result screen
+          // Try to load detailed review data (only available if grades released)
+          try {
+            const rd = await req<ReviewData>(`/api/v1/submissions/${existingSubId}/review`)
+            if (rd.grades_released && rd.release_type === "score_with_feedback") {
+              setReviewData(rd)
+              setLoading(false)
+              return
+            }
+          } catch {
+            // If review fails, fall through to basic result screen
+          }
+          // Basic result screen
           setResult(subResult)
           setLoading(false)
           return
@@ -524,6 +875,10 @@ export default function ExamPage() {
         <div className="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
       </div>
     )
+  }
+
+  if (reviewData) {
+    return <DetailedReviewScreen review={reviewData} onReturn={() => router.push("/student")} />
   }
 
   if (result) {

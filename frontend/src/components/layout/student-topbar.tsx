@@ -1,6 +1,8 @@
 "use client"
 
-import { ChevronDown, LogOut } from "lucide-react"
+import Link from "next/link"
+import { usePathname } from "next/navigation"
+import { ChevronDown, LayoutDashboard, LineChart, LogOut } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -9,6 +11,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { useAuth } from "@/providers/auth-provider"
+import { cn } from "@/lib/utils"
 
 function getInitials(name: string) {
   return name
@@ -20,8 +23,14 @@ function getInitials(name: string) {
     .toUpperCase()
 }
 
+const NAV_LINKS = [
+  { href: "/student", label: "My Exams", icon: LayoutDashboard },
+  { href: "/student/analytics", label: "Analytics", icon: LineChart },
+]
+
 export function StudentTopBar({ userName }: { userName: string }) {
   const { logout } = useAuth()
+  const pathname = usePathname()
   const initials = getInitials(userName || "S")
 
   return (
@@ -30,9 +39,31 @@ export function StudentTopBar({ userName }: { userName: string }) {
       style={{ backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)" }}
     >
       {/* Logo */}
-      <span className="font-display font-bold text-[22px] leading-none bg-gradient-to-r from-primary-500 to-accent-500 bg-clip-text text-transparent tracking-tight select-none">
-        SURIE
-      </span>
+      <div className="flex items-center gap-6">
+        <span className="font-display font-bold text-[22px] leading-none bg-gradient-to-r from-primary-500 to-accent-500 bg-clip-text text-transparent tracking-tight select-none">
+          SURIE
+        </span>
+        <nav className="hidden sm:flex items-center gap-1">
+          {NAV_LINKS.map(({ href, label, icon: Icon }) => {
+            const active = pathname === href
+            return (
+              <Link
+                key={href}
+                href={href}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-1.5 rounded-[8px] text-[13px] font-medium font-body transition-colors",
+                  active
+                    ? "bg-primary-50 text-primary-600"
+                    : "text-ink-tertiary hover:text-ink-primary hover:bg-surface-secondary"
+                )}
+              >
+                <Icon className="w-3.5 h-3.5" strokeWidth={1.75} />
+                {label}
+              </Link>
+            )
+          })}
+        </nav>
+      </div>
 
       {/* User menu */}
       <DropdownMenu>

@@ -363,6 +363,94 @@ async def get_submission(
     )
 
 
+# ── Review submission (with correct answers, only if grades released) ──
+
+
+@router.get("/{submission_id}/review")
+async def review_submission(
+    submission_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Return full review data: responses + questions with correct answers.
+
+    Only allowed when the assessment's grades_released=True.
+    """
+    submission = await _get_submission_or_403(submission_id, db, current_user)
+
+    # Fetch assessment to check grades_released and release_type
+    a_result = await db.execute(select(Assessment).where(Assessment.id == submission.assessment_id))
+    assessment = a_result.scalar_one_or_none()
+    if not assessment:
+        from fastapi import HTTPException as _HTTPException
+        raise _HTTPException(status_code=404, detail="Assessment not found")
+
+    grades_released = getattr(assessment, "grades_released", False)
+    release_type = getattr(assessment, "release_type", "none") or "none"
+
+    # Fetch questions ordered by display_order
+    q_result = await db.execute(
+        select(Question)
+        .where(Question.assessment_id == submission.assessment_id)
+        .order_by(Question.display_order)
+    )
+    questions = q_result.scalars().all()
+
+    # Fetch responses
+    r_result = await db.execute(
+        select(ResponseModel).where(ResponseModel.submission_id == submission_id)
+    )
+    responses = r_result.scalars().all()
+    resp_by_q = {r.question_id: r for r in responses}
+
+    def _q_type_label(qt: str) -> str:
+        return {
+            "mcq": "Multiple Choice",
+            "true_false": "True or False",
+            "identification": "Identification",
+            "essay": "Essay",
+            "matching": "Matching",
+        }.get(qt, qt)
+
+    questions_out = []
+    for q in questions:
+        q_type = str(q.question_type.value if hasattr(q.question_type, "value") else q.question_type)
+        resp = resp_by_q.get(q.id)
+        max_marks = float(getattr(q, "max_marks", 1.0) or 1.0)
+
+        questions_out.append({
+            "id": str(q.id),
+            "question_text": q.question_text,
+            "question_type": q_type,
+            "question_type_label": _q_type_label(q_type),
+            "choices": q.choices,
+            "correct_answer": q.correct_answer if grades_released else None,
+            "explanation": q.explanation if grades_released else None,
+            "subtopic_tags": q.subtopic_tags,
+            "display_order": q.display_order,
+            "max_marks": max_marks,
+            "student_answer": resp.student_answer if resp else None,
+            "is_correct": resp.is_correct if resp else None,
+            "score": resp.score if resp else None,
+            "feedback": (resp.feedback if resp else None) if grades_released else None,
+            "rubric": (resp.rubric if resp else None) if grades_released else None,
+            "teacher_comment": (resp.teacher_comment if resp else None) if grades_released else None,
+        })
+
+    return {
+        "submission_id": str(submission.id),
+        "assessment_id": str(submission.assessment_id),
+        "assessment_title": assessment.title,
+        "status": submission.status.value if hasattr(submission.status, "value") else submission.status,
+        "submitted_at": submission.submitted_at.isoformat() if submission.submitted_at else None,
+        "total_score": submission.total_score,
+        "max_score": submission.max_score,
+        "grades_released": grades_released,
+        "release_type": release_type,
+        "questions": questions_out,
+    }
+
+
 # ── Student: list assigned assessments ───────────────────────
 
 
