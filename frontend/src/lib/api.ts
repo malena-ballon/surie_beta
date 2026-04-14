@@ -338,9 +338,25 @@ export interface AnalyticsExam {
   subtopics: AnalyticsSubtopic[]
 }
 
+export interface AnalyticsBloomsPoint {
+  level: string
+  label: string
+  student_pct: number | null
+  class_avg_pct: number | null
+}
+
+export interface AnalyticsQTypePoint {
+  type: string
+  label: string
+  student_pct: number | null
+  class_avg_pct: number | null
+}
+
 export interface StudentAnalytics {
   exams: AnalyticsExam[]
   overall_mastery: AnalyticsMastery[]
+  blooms_performance: AnalyticsBloomsPoint[]
+  qtype_performance: AnalyticsQTypePoint[]
   classes: { id: string; name: string; subject: string }[]
   all_assessments: { id: string; title: string; class_name: string }[]
 }
