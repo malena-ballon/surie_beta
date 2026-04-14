@@ -11,6 +11,7 @@ import {
   FileText,
   Loader2,
   MessageSquare,
+  PenLine,
   Plus,
   Send,
   Sparkles,
@@ -31,6 +32,7 @@ import {
 } from "@/lib/api"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
+import { MathEquationModal, renderWithMath } from "@/components/math-equation-modal"
 
 // ── Shared input style ─────────────────────────────────────────
 const inputCls =
@@ -296,12 +298,47 @@ function Step1({ classes, existing, hasExistingQuestions, onDone }: Step1Props) 
     }
   }
 
+  // "Create Manually" — saves metadata, skips AI generation, goes to Step 2
+  const handleCreateManually = async () => {
+    if (!title.trim()) return toast.error("Enter a title")
+    if (!classId) return toast.error("Select a class")
+
+    setGenerating(true)
+    try {
+      let assessment: AssessmentItem
+      if (existing) {
+        assessment = await api.updateAssessment(existing.id, {
+          title: title.trim(),
+          description: description.trim() || null,
+          class_id: classId,
+          difficulty,
+          source_material_id: materialId ?? undefined,
+        })
+        const detail = await api.getAssessment(existing.id)
+        onDone({ assessment, questions: detail.questions, breakdown: {} })
+      } else {
+        assessment = await api.createAssessment({
+          title: title.trim(),
+          description: description.trim() || null,
+          class_id: classId,
+          difficulty,
+          source_material_id: materialId ?? undefined,
+        })
+        onDone({ assessment, questions: [], breakdown: {} })
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to save")
+    } finally {
+      setGenerating(false)
+    }
+  }
+
   // "Generate / Regenerate" — always generates new questions (requires material)
   const handleGenerate = async () => {
     if (!title.trim()) return toast.error("Enter a title")
     if (!classId) return toast.error("Select a class")
-    if (!materialId) return toast.error("Upload or select a source material")
-    if (total === 0) return toast.error("Add at least one question")
+    if (!materialId) return toast.error("Upload or select a source material to generate questions")
+    if (total === 0) return toast.error("Add at least one question to the breakdown")
 
     setGenerating(true)
     try {
@@ -398,7 +435,8 @@ function Step1({ classes, existing, hasExistingQuestions, onDone }: Step1Props) 
         {/* Source Material */}
         <div className="space-y-1.5">
           <label className="text-[13px] font-medium text-ink-secondary font-body">
-            Source Material <span className="text-danger-500">*</span>
+            Source Material{" "}
+            <span className="text-ink-tertiary font-normal">(required for AI generation)</span>
           </label>
 
           {materialId ? (
@@ -560,10 +598,21 @@ function Step1({ classes, existing, hasExistingQuestions, onDone }: Step1Props) 
             </Button>
           </div>
         ) : (
-          <Button variant="gradient" size="lg" className="w-full mt-2" onClick={handleGenerate} disabled={generating}>
-            {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-            {existing ? "Generate Questions" : "Generate Exam"}
-          </Button>
+          <div className="flex flex-col gap-3 mt-2">
+            <Button variant="gradient" size="lg" className="w-full" onClick={handleGenerate} disabled={generating}>
+              {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+              {existing ? "Generate Questions" : "Generate Exam with AI"}
+            </Button>
+            <div className="flex items-center gap-3">
+              <div className="flex-1 h-px bg-border-light" />
+              <span className="text-[12px] font-body text-ink-tertiary">or</span>
+              <div className="flex-1 h-px bg-border-light" />
+            </div>
+            <Button variant="secondary" size="lg" className="w-full" onClick={handleCreateManually} disabled={generating}>
+              {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <PenLine className="w-4 h-4" />}
+              Create Exam Manually
+            </Button>
+          </div>
         )}
       </div>
     </>
@@ -796,6 +845,36 @@ function AIChatPanel({
 // STEP 2 — Review & Edit
 // ══════════════════════════════════════════════════════════════
 
+const DEFAULT_MAX_MARKS: Record<QuestionType, number> = {
+  mcq: 1,
+  true_false: 1,
+  identification: 2,
+  essay: 5,
+  matching: 3,
+}
+
+function MathButton({ onInsert }: { onInsert: (latex: string) => void }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        title="Insert math equation"
+        className="flex items-center gap-1 px-2 py-1 rounded-[6px] border border-border-default text-[12px] font-semibold font-body text-ink-secondary hover:border-primary-500 hover:text-primary-500 hover:bg-primary-50 transition-colors"
+      >
+        ∑ Eq
+      </button>
+      {open && (
+        <MathEquationModal
+          onInsert={onInsert}
+          onClose={() => setOpen(false)}
+        />
+      )}
+    </>
+  )
+}
+
 function QuestionEditor({
   question,
   onChange,
@@ -807,33 +886,101 @@ function QuestionEditor({
 }) {
   const [explanationOpen, setExplanationOpen] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const questionTextRef = useRef<HTMLTextAreaElement>(null)
+  const answerRef = useRef<HTMLInputElement>(null)
+
+  const maxMarks = question.max_marks ?? DEFAULT_MAX_MARKS[question.question_type]
+
+  const insertIntoTextarea = (ref: React.RefObject<HTMLTextAreaElement | null>, current: string, insert: string, onChangeFn: (v: string) => void) => {
+    const el = ref.current
+    if (!el) { onChangeFn(current + insert); return }
+    const start = el.selectionStart ?? current.length
+    const end = el.selectionEnd ?? current.length
+    const next = current.slice(0, start) + insert + current.slice(end)
+    onChangeFn(next)
+    requestAnimationFrame(() => {
+      el.focus()
+      el.setSelectionRange(start + insert.length, start + insert.length)
+    })
+  }
+
+  const insertIntoInput = (ref: React.RefObject<HTMLInputElement | null>, current: string, insert: string, onChangeFn: (v: string) => void) => {
+    const el = ref.current
+    if (!el) { onChangeFn(current + insert); return }
+    const start = el.selectionStart ?? current.length
+    const end = el.selectionEnd ?? current.length
+    const next = current.slice(0, start) + insert + current.slice(end)
+    onChangeFn(next)
+    requestAnimationFrame(() => {
+      el.focus()
+      el.setSelectionRange(start + insert.length, start + insert.length)
+    })
+  }
 
   return (
     <div className="bg-white rounded-[14px] border border-border-light p-6 space-y-4">
-      {/* Badges row */}
-      <div className="flex items-center gap-2 flex-wrap">
-        <span className={cn("px-2 py-0.5 rounded text-[11px] font-semibold", TYPE_COLOR[question.question_type])}>
-          {TYPE_LABEL[question.question_type]}
-        </span>
-        {question.blooms_level && (
-          <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-surface-secondary text-ink-secondary capitalize">
-            {question.blooms_level}
+      {/* Badges row + max marks */}
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className={cn("px-2 py-0.5 rounded text-[11px] font-semibold", TYPE_COLOR[question.question_type])}>
+            {TYPE_LABEL[question.question_type]}
           </span>
-        )}
-        {question.difficulty && (
-          <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-surface-secondary text-ink-secondary capitalize">
-            {question.difficulty}
-          </span>
-        )}
+          {question.blooms_level && (
+            <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-surface-secondary text-ink-secondary capitalize">
+              {question.blooms_level}
+            </span>
+          )}
+          {question.difficulty && (
+            <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-surface-secondary text-ink-secondary capitalize">
+              {question.difficulty}
+            </span>
+          )}
+        </div>
+        {/* Max marks — editable */}
+        <div className="flex items-center gap-1.5 shrink-0">
+          <label className="text-[11px] font-medium font-body text-ink-tertiary whitespace-nowrap">Max pts:</label>
+          <input
+            type="number"
+            min={0}
+            value={maxMarks}
+            onChange={(e) => {
+              const v = parseInt(e.target.value, 10)
+              onChange({ max_marks: isNaN(v) ? 0 : Math.max(0, v) })
+            }}
+            className="w-[52px] h-[28px] px-2 text-center text-[13px] font-semibold font-display text-ink-primary bg-amber-50 border border-amber-200 rounded-[8px] focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-300 transition-colors"
+          />
+        </div>
       </div>
 
       {/* Question text */}
-      <textarea
-        value={question.question_text}
-        onChange={(e) => onChange({ question_text: e.target.value })}
-        rows={3}
-        className={cn(inputCls, "h-auto resize-none py-3 leading-relaxed")}
-      />
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between">
+          <label className="text-[12px] font-medium font-body text-ink-tertiary">Question</label>
+          <MathButton
+            onInsert={(latex) =>
+              insertIntoTextarea(
+                questionTextRef,
+                question.question_text,
+                latex,
+                (v) => onChange({ question_text: v })
+              )
+            }
+          />
+        </div>
+        <textarea
+          ref={questionTextRef}
+          value={question.question_text}
+          onChange={(e) => onChange({ question_text: e.target.value })}
+          rows={3}
+          className={cn(inputCls, "h-auto resize-none py-3 leading-relaxed")}
+        />
+        {/* Math preview */}
+        {question.question_text.includes("$") && (
+          <div className="px-3 py-2 bg-primary-50 border border-primary-100 rounded-[8px] text-sm font-body text-ink-primary leading-relaxed">
+            {renderWithMath(question.question_text)}
+          </div>
+        )}
+      </div>
 
       {/* MCQ choices */}
       {question.question_type === "mcq" && question.choices && (
@@ -842,7 +989,7 @@ function QuestionEditor({
             <div
               key={choice.label}
               className={cn(
-                "flex items-center gap-3 p-3 rounded-[10px] border transition-colors",
+                "flex items-start gap-3 p-3 rounded-[10px] border transition-colors",
                 choice.is_correct
                   ? "border-green-400 bg-green-50"
                   : "border-border-light bg-white"
@@ -862,7 +1009,7 @@ function QuestionEditor({
                   })
                 }}
                 className={cn(
-                  "w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors",
+                  "w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors mt-1",
                   choice.is_correct
                     ? "border-green-500 bg-green-500"
                     : "border-border-default"
@@ -870,10 +1017,10 @@ function QuestionEditor({
               >
                 {choice.is_correct && <div className="w-2 h-2 rounded-full bg-white" />}
               </button>
-              <span className="text-[12px] font-semibold text-ink-tertiary w-4 shrink-0">
+              <span className="text-[12px] font-semibold text-ink-tertiary w-4 shrink-0 mt-1.5">
                 {choice.label}
               </span>
-              <input
+              <textarea
                 value={choice.text}
                 onChange={(e) => {
                   const updated = question.choices!.map((c, i) =>
@@ -881,7 +1028,14 @@ function QuestionEditor({
                   )
                   onChange({ choices: updated })
                 }}
-                className="flex-1 text-sm font-body text-ink-primary bg-transparent outline-none"
+                rows={1}
+                className="flex-1 text-sm font-body text-ink-primary bg-transparent outline-none resize-none leading-relaxed"
+                style={{ minHeight: "24px", overflow: "hidden" }}
+                onInput={(e) => {
+                  const el = e.currentTarget
+                  el.style.height = "auto"
+                  el.style.height = el.scrollHeight + "px"
+                }}
               />
             </div>
           ))}
@@ -950,12 +1104,30 @@ function QuestionEditor({
       {/* Correct answer (non-MCQ, non-matching) */}
       {question.question_type !== "mcq" && question.question_type !== "matching" && (
         <div className="space-y-1.5">
-          <label className="text-[12px] font-medium font-body text-ink-tertiary">Correct Answer</label>
+          <div className="flex items-center justify-between">
+            <label className="text-[12px] font-medium font-body text-ink-tertiary">Correct Answer</label>
+            <MathButton
+              onInsert={(latex) =>
+                insertIntoInput(
+                  answerRef,
+                  question.correct_answer,
+                  latex,
+                  (v) => onChange({ correct_answer: v })
+                )
+              }
+            />
+          </div>
           <input
+            ref={answerRef}
             value={question.correct_answer}
             onChange={(e) => onChange({ correct_answer: e.target.value })}
             className={cn(inputCls, "h-[38px]")}
           />
+          {question.correct_answer.includes("$") && (
+            <div className="px-3 py-2 bg-primary-50 border border-primary-100 rounded-[8px] text-sm font-body text-ink-primary leading-relaxed">
+              {renderWithMath(question.correct_answer)}
+            </div>
+          )}
         </div>
       )}
 
@@ -1042,7 +1214,12 @@ interface Step2Props {
 }
 
 function Step2({ assessment, initialQuestions, classes, lastBreakdown, onDone }: Step2Props) {
-  const [questions, setQuestions] = useState<QuestionItem[]>(initialQuestions)
+  const [questions, setQuestions] = useState<QuestionItem[]>(() =>
+    initialQuestions.map((q) => ({
+      ...q,
+      max_marks: q.max_marks ?? DEFAULT_MAX_MARKS[q.question_type],
+    }))
+  )
   const [selectedId, setSelectedId] = useState<string | null>(initialQuestions[0]?.id ?? null)
   const [regenerating, setRegenerating] = useState(false)
   const [confirmRegen, setConfirmRegen] = useState(false)
@@ -1095,8 +1272,12 @@ function Step2({ assessment, initialQuestions, classes, lastBreakdown, onDone }:
         subject: cls?.subject ?? "",
         grade_level: cls?.grade_level ?? "",
       })
-      setQuestions(newQuestions)
-      setSelectedId(newQuestions[0]?.id ?? null)
+      const withMarks = newQuestions.map((q) => ({
+        ...q,
+        max_marks: q.max_marks ?? DEFAULT_MAX_MARKS[q.question_type],
+      }))
+      setQuestions(withMarks)
+      setSelectedId(withMarks[0]?.id ?? null)
       toast.success("Questions regenerated")
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Regeneration failed")
@@ -1138,7 +1319,7 @@ function Step2({ assessment, initialQuestions, classes, lastBreakdown, onDone }:
       )
       if (!res.ok) throw new Error()
       const created: QuestionItem = await res.json()
-      setQuestions((qs) => [...qs, created])
+      setQuestions((qs) => [...qs, { ...created, max_marks: DEFAULT_MAX_MARKS[questionType] }])
       setSelectedId(created.id)
       toast.success("Question added")
     } catch {
@@ -1234,9 +1415,14 @@ function Step2({ assessment, initialQuestions, classes, lastBreakdown, onDone }:
                 Q{i + 1}
               </span>
               <div className="flex-1 min-w-0 hidden lg:block">
-                <p className="text-[12px] font-body text-ink-primary line-clamp-2 leading-snug">
-                  {q.question_text}
-                </p>
+                <div className="flex items-start justify-between gap-1">
+                  <p className="text-[12px] font-body text-ink-primary line-clamp-2 leading-snug flex-1">
+                    {q.question_text}
+                  </p>
+                  <span className="text-[10px] font-semibold font-display text-amber-600 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5 shrink-0 ml-1">
+                    {q.max_marks ?? DEFAULT_MAX_MARKS[q.question_type]}pt
+                  </span>
+                </div>
                 <div className="flex items-center gap-1.5 mt-1">
                   <span className={cn("px-1.5 py-0.5 rounded text-[10px] font-semibold", TYPE_COLOR[q.question_type])}>
                     {TYPE_LABEL[q.question_type]}

@@ -121,6 +121,7 @@ export interface QuestionItem {
   blooms_level: BloomsLevel | null
   difficulty: DifficultyLevel | null
   display_order: number
+  max_marks?: number
   created_via: "ai" | "manual" | "hybrid"
   created_at: string
   updated_at: string
@@ -185,6 +186,7 @@ export interface QuestionUpdateData {
   blooms_level?: BloomsLevel | null
   difficulty?: DifficultyLevel | null
   display_order?: number
+  max_marks?: number
 }
 
 export interface GenerateData {
